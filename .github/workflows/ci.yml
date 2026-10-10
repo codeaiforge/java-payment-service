@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['episode-*']
+    tags: ['episode-*', 'bonus-*']
   pull_request:
 
 jobs:
