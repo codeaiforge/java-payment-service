@@ -22,7 +22,8 @@ import org.springframework.stereotype.Service;
  *
  * Nothing is written here, so there is no database change that a failed
  * publish could leave behind: either the message is queued or the caller gets
- * a 503 and the payment is exactly as it was. *
+ * a 503 and the payment is exactly as it was.
+ *
  * Access is checked here, while there is a caller. The message carries only
  * the payment ID, and the consumer doesn't check again: it has no caller to
  * check, and this service, behind the check, is the only publisher to the topic.
