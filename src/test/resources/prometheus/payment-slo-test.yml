@@ -1,0 +1,147 @@
+# promtool unit tests for observability/prometheus/rules/payment-slo.yml (docs/episodes/bonus-08), run by
+# PrometheusRulesTest. Series notation: 'a+bxn' is a, then n more samples each b higher; one sample per minute.
+rule_files:
+  - payment-slo.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Healthy: a few technical errors (0.08%), 1% slow (exactly the latency budget), a busy outbox that keeps up, a lost
+  # answer now and then that reconciliation settles within 3 minutes. Nothing fires.
+  - name: healthy
+    interval: 1m
+    input_series:
+      - series: 'payment_executions_total{result="completed",instance="a"}'
+        values: '0+1000x400'
+      # A business "no" is not an error: 20% refused changes nothing.
+      - series: 'payment_executions_total{result="refused",instance="a"}'
+        values: '0+250x400'
+      - series: 'payment_executions_total{result="error",instance="a"}'
+        values: '0+1x400'
+      - series: 'http_server_requests_seconds_bucket{method="POST",uri="/payments",le="0.5",instance="a"}'
+        values: '0+99x400'
+      - series: 'http_server_requests_seconds_count{method="POST",uri="/payments",instance="a"}'
+        values: '0+100x400'
+      - series: 'payment_events_pending{instance="a"}'
+        values: '50x400'
+      - series: 'resilience4j_circuitbreaker_state{name="payment-system",state="closed",instance="a"}'
+        values: '1x400'
+      - series: 'payments_processing_oldest_age_seconds{instance="a"}'
+        values: '0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3 0+60x3'
+    alert_rule_test:
+      - {eval_time: 6h, alertname: PaymentSuccessBudgetBurn, exp_alerts: []}
+      - {eval_time: 6h, alertname: PaymentLatencyBudgetBurn, exp_alerts: []}
+      - {eval_time: 6h, alertname: PaymentEventsOutboxLag, exp_alerts: []}
+      - {eval_time: 6h, alertname: CircuitBreakerOpen, exp_alerts: []}
+      - {eval_time: 6h, alertname: PaymentsStuckInProcessing, exp_alerts: []}
+
+  # The payment system is down for an hour: 10% of executions get no answer. Both success windows fire (Alertmanager
+  # holds back the slow one, docs/runbooks), and the causes: its breaker, and the payments left PROCESSING.
+  # Two instances, to show the SLI sums them. POST /payments doesn't call the payment system: its latency is fine.
+  - name: payment system down
+    interval: 1m
+    input_series:
+      - series: 'payment_executions_total{result="completed",instance="a"}'
+        values: '0+45x60'
+      - series: 'payment_executions_total{result="error",instance="a"}'
+        values: '0+5x60'
+      - series: 'payment_executions_total{result="completed",instance="b"}'
+        values: '0+45x60'
+      - series: 'payment_executions_total{result="error",instance="b"}'
+        values: '0+5x60'
+      - series: 'http_server_requests_seconds_bucket{method="POST",uri="/payments",le="0.5",instance="a"}'
+        values: '0+100x60'
+      - series: 'http_server_requests_seconds_count{method="POST",uri="/payments",instance="a"}'
+        values: '0+100x60'
+      - series: 'resilience4j_circuitbreaker_state{name="payment-system",state="closed",instance="a"}'
+        values: '0x60'
+      - series: 'resilience4j_circuitbreaker_state{name="account-system",state="closed",instance="a"}'
+        values: '1x60'
+      - series: 'payments_processing_oldest_age_seconds{instance="a"}'
+        values: '0+60x60'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: PaymentSuccessBudgetBurn
+        exp_alerts:
+          - exp_labels: {service: payment-service, slo: success, severity: page, window: fast}
+            exp_annotations:
+              summary: "Payment executions are failing for technical reasons; the monthly error budget will be gone in about 2 days."
+              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+          - exp_labels: {service: payment-service, slo: success, severity: ticket, window: slow}
+            exp_annotations:
+              summary: "Payment executions are failing for technical reasons; the monthly error budget will be gone in about 5 days."
+              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+      - {eval_time: 1h, alertname: PaymentLatencyBudgetBurn, exp_alerts: []}
+      # Not yet: the breaker must stay open for 5 minutes, plus the minute it is looked at over.
+      - {eval_time: 4m, alertname: CircuitBreakerOpen, exp_alerts: []}
+      - eval_time: 1h
+        alertname: CircuitBreakerOpen
+        exp_alerts:
+          - exp_labels: {service: payment-service, severity: ticket, name: payment-system}
+            exp_annotations:
+              summary: "The payment-system circuit breaker has not closed for 5 minutes: calls to it fail at once."
+              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/CircuitBreakerOpen.md
+      - eval_time: 1h
+        alertname: PaymentsStuckInProcessing
+        exp_alerts:
+          - exp_labels: {service: payment-service, severity: ticket}
+            exp_annotations:
+              summary: "A payment has been PROCESSING for over 7 minutes; reconciliation is not settling it."
+              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentsStuckInProcessing.md
+
+  # A slow leak: 4% errors for six hours. Too slow to page (14.4x would be 7.2%), but the budget is going: a ticket.
+  - name: slow leak
+    interval: 1m
+    input_series:
+      - series: 'payment_executions_total{result="completed",instance="a"}'
+        values: '0+96x400'
+      - series: 'payment_executions_total{result="error",instance="a"}'
+        values: '0+4x400'
+    alert_rule_test:
+      - eval_time: 6h
+        alertname: PaymentSuccessBudgetBurn
+        exp_alerts:
+          - exp_labels: {service: payment-service, slo: success, severity: ticket, window: slow}
+            exp_annotations:
+              summary: "Payment executions are failing for technical reasons; the monthly error budget will be gone in about 5 days."
+              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+
+  # 30% of POST /payments slower than 500ms (the account system is slow, say).
+  - name: slow payment creation
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{method="POST",uri="/payments",le="0.5",instance="a"}'
+        values: '0+70x60'
+      - series: 'http_server_requests_seconds_count{method="POST",uri="/payments",instance="a"}'
+        values: '0+100x60'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: PaymentLatencyBudgetBurn
+        exp_alerts:
+          - exp_labels: {service: payment-service, slo: latency, severity: page, window: fast}
+            exp_annotations:
+              summary: "POST /payments is slower than 500ms too often; the monthly error budget will be gone in about 2 days."
+              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
+          - exp_labels: {service: payment-service, slo: latency, severity: ticket, window: slow}
+            exp_annotations:
+              summary: "POST /payments is slower than 500ms too often; the monthly error budget will be gone in about 5 days."
+              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
+
+  # The relay has stopped (or the broker is down): 5 more rows every minute, none sent.
+  - name: outbox lag
+    interval: 1m
+    input_series:
+      - series: 'payment_events_pending{instance="a"}'
+        values: '0+5x30'
+      - series: 'payment_events_pending{instance="b"}'
+        values: '0+5x30'
+    alert_rule_test:
+      # The outbox was empty within the last 10 minutes: not yet.
+      - {eval_time: 9m, alertname: PaymentEventsOutboxLag, exp_alerts: []}
+      - eval_time: 20m
+        alertname: PaymentEventsOutboxLag
+        exp_alerts:
+          - exp_labels: {service: payment-service, severity: ticket}
+            exp_annotations:
+              summary: "The payment-events outbox has not emptied in 10 minutes and is still growing."
+              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentEventsOutboxLag.md

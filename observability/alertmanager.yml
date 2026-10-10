@@ -1,0 +1,33 @@
+# Alertmanager for local use (docs/episodes/bonus-08). Prometheus and Loki's ruler send it what fires; it groups,
+# holds back and routes. Locally both receivers are the WireMock stand-in (wiremock/mappings/alert-receiver.json):
+# no real pager. Read what it was sent at http://localhost:8089/__admin/requests.
+route:
+  receiver: ticket
+  # Everything firing for the service at once is one notification: the payment system going down is one page that
+  # lists its causes, not one page each.
+  group_by: [service]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Only symptoms page: an SLO burning fast means customers are affected now. Causes are tickets.
+    - matchers: [severity="page"]
+      receiver: page
+
+receivers:
+  - name: page
+    webhook_configs:
+      - url: http://account-system:8080/alerts/page
+  - name: ticket
+    webhook_configs:
+      - url: http://account-system:8080/alerts/ticket
+
+inhibit_rules:
+  # A budget burning fast is also burning slowly: the page already says so.
+  - source_matchers: [window="fast"]
+    target_matchers: [window="slow"]
+    equal: [alertname]
+  # Reconciliation asks the payment system too: while its breaker is open, payments stuck in PROCESSING are expected.
+  - source_matchers: [alertname="CircuitBreakerOpen", name="payment-system"]
+    target_matchers: [alertname="PaymentsStuckInProcessing"]
+    equal: [service]

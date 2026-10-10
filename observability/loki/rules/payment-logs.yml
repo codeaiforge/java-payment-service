@@ -1,0 +1,15 @@
+# Log-based alerts (docs/episodes/bonus-08), evaluated by Loki's ruler every minute and sent to Alertmanager like
+# Prometheus's. Loki without auth puts everything under the tenant "fake", so docker-compose.yml mounts this
+# directory at /etc/loki/rules/fake.
+groups:
+  - name: payment-service-logs
+    rules:
+      # The payment system answered with a status this service doesn't know (PaymentExecutionAdapter). No metric
+      # counts that: the payment stays PROCESSING and the line is the only trace. A new status on their side is a
+      # contract change, so someone should look. The log line's text is the contract here: change it, change this.
+      - alert: UnknownPaymentSystemStatus
+        expr: sum(count_over_time({service_name="payment-service"} |= "Unknown status from payment system" [5m])) > 3
+        labels: {service: payment-service, severity: ticket}
+        annotations:
+          summary: The payment system is answering with a status this service doesn't recognize.
+          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/UnknownPaymentSystemStatus.md

@@ -51,6 +51,7 @@ services:
 
   # A stand-in for the external account, authorization, limit and payment systems, serving the
   # fictional data in wiremock/mappings. Unknown accounts get WireMock's default 404.
+  # Also Alertmanager's pager and ticket queue (docs/episodes/bonus-08): http://localhost:8089/__admin/requests.
   account-system:
     image: wiremock/wiremock:3.13.2
     ports:
@@ -87,13 +88,16 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
   # Scrapes the running service's /actuator/prometheus every 5s (observability/prometheus.yml), in its
-  # container or on the host.
+  # container or on the host, and evaluates the alert rules in observability/prometheus/rules (docs/episodes/bonus-08).
+  # Exemplar storage keeps the trace IDs the scrape carries, for Grafana's links to Tempo.
   prometheus:
     image: prom/prometheus:v3.7.3
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--enable-feature=exemplar-storage"]
     ports:
       - "9090:9090"
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -109,6 +113,7 @@ services:
 
   # Receives the service's log lines (docs/episodes/bonus-06) over OTLP on 3100, in its container or on the host,
   # and keeps them 7 days. Grafana: Explore > Loki, {service_name="payment-service"}.
+  # Its ruler evaluates the log-based alerts in observability/loki/rules (docs/episodes/bonus-08).
   loki:
     image: grafana/loki:3.5.7
     command: ["-config.file=/etc/loki.yaml"]
@@ -116,6 +121,17 @@ services:
       - "3100:3100"
     volumes:
       - ./observability/loki.yaml:/etc/loki.yaml:ro
+      - ./observability/loki/rules:/etc/loki/rules/fake:ro
+
+  # Receives what fires from Prometheus and Loki, groups it, holds back what another alert explains, and sends it on
+  # (observability/alertmanager.yml, docs/episodes/bonus-08). http://localhost:9093 shows what is firing and silenced.
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
 
   # http://localhost:3000, anonymous admin, Prometheus, Tempo and Loki already set up as data sources. Local use only.
   grafana:

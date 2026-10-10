@@ -28,4 +28,8 @@ interface PaymentJpaRepository extends JpaRepository<PaymentEntity, UUID> {
 	Optional<PaymentEntity> findByIdForUpdate(UUID id);
 
 	List<PaymentEntity> findByStatusAndStatusChangedAtLessThanEqual(String status, Instant before);
+
+	// Answered from the (status, status_changed_at) index.
+	@Query("SELECT min(p.statusChangedAt) FROM PaymentEntity p WHERE p.status = 'PROCESSING'")
+	Optional<Instant> oldestProcessingSince();
 }

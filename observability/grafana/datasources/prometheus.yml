@@ -4,3 +4,9 @@ datasources:
     type: prometheus
     url: http://prometheus:9090
     isDefault: true
+    # An exemplar's trace_id opens that trace in Tempo (docs/episodes/bonus-08). Turn on "Exemplars" in a query's
+    # options, e.g. on http_server_requests_seconds_bucket: each dot is one real request.
+    jsonData:
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo

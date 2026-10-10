@@ -1,5 +1,6 @@
 package com.example.payment.application.service.command;
 
+import com.example.payment.application.exception.ExternalSystemUnavailableException;
 import com.example.payment.application.exception.InvalidPaymentStateException;
 import com.example.payment.application.exception.PaymentAuthorizationException;
 import com.example.payment.application.exception.PaymentLimitExceededException;
@@ -9,6 +10,7 @@ import com.example.payment.application.port.secondary.AuditPort;
 import com.example.payment.application.port.secondary.PaymentExecutionPort;
 import com.example.payment.application.port.secondary.PaymentExecutionPort.Outcome;
 import com.example.payment.application.port.secondary.PaymentMetricsPort;
+import com.example.payment.application.port.secondary.PaymentMetricsPort.Execution;
 import com.example.payment.application.port.secondary.PaymentRepository;
 import com.example.payment.application.usecase.command.ExecutePaymentCommand;
 import com.example.payment.domain.entity.Payment;
@@ -35,6 +37,8 @@ import java.util.function.Function;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class ExecutePaymentServiceTest {
 
@@ -50,6 +54,7 @@ class ExecutePaymentServiceTest {
 	private final List<String> audited = new ArrayList<>();
 	private final AuditPort audit = AuditTrail.into(audited);
 	private final List<PaymentEvent> events = new ArrayList<>();
+	private final PaymentMetricsPort metrics = mock(PaymentMetricsPort.class);
 	// What the stored status would be if another request had changed it after we read the payment.
 	private PaymentStatus changedByAnotherRequest;
 
@@ -100,6 +105,7 @@ class ExecutePaymentServiceTest {
 			assertThat(event.paymentId()).isEqualTo(stored.id());
 			assertThat(event.amount()).isEqualTo(stored.amount());
 		});
+		verify(metrics).executionEnded(Execution.COMPLETED);
 	}
 
 	@Test
@@ -124,6 +130,7 @@ class ExecutePaymentServiceTest {
 				PaymentStatus.FAILED);
 		assertThat(audited).endsWith("PROCESSING->FAILED");
 		assertThat(events).extracting(PaymentEvent::type).containsExactly(PaymentEventType.PAYMENT_FAILED);
+		verify(metrics).executionEnded(Execution.REFUSED);
 	}
 
 	@Test
@@ -135,6 +142,7 @@ class ExecutePaymentServiceTest {
 		assertThat(savedStatuses).containsExactly(PaymentStatus.AUTHORIZED, PaymentStatus.PROCESSING);
 		assertThat(audited).containsExactly("CREATED->AUTHORIZED", "AUTHORIZED->PROCESSING");
 		assertThat(events).isEmpty(); // nothing final has happened yet
+		verify(metrics).executionEnded(Execution.ERROR);
 	}
 
 	@Test
@@ -148,6 +156,7 @@ class ExecutePaymentServiceTest {
 		assertThat(savedStatuses).isEmpty();
 		assertThat(statusWhenSent).isEmpty();
 		assertThat(audited).isEmpty();
+		verify(metrics).executionEnded(Execution.REFUSED);
 	}
 
 	@Test
@@ -159,6 +168,7 @@ class ExecutePaymentServiceTest {
 				.withMessage("Payment " + stored.id() + " exceeds the source account's limit");
 		assertThat(savedStatuses).containsExactly(PaymentStatus.AUTHORIZED);
 		assertThat(statusWhenSent).isEmpty();
+		verify(metrics).executionEnded(Execution.REFUSED);
 	}
 
 	@Test
@@ -207,6 +217,7 @@ class ExecutePaymentServiceTest {
 		assertThat(statusWhenSent).hasSize(1);
 		// A finished payment is refused before any external system is asked again.
 		assertThat(authorizationRequests).isEqualTo(1);
+		verify(metrics).executionEnded(Execution.COMPLETED); // once: the second wasn't an execution
 	}
 
 	@Test
@@ -216,6 +227,7 @@ class ExecutePaymentServiceTest {
 		assertThatExceptionOfType(PaymentNotFoundException.class)
 				.isThrownBy(() -> serviceAnswering(Outcome.EXECUTED).executePayment(new ExecutePaymentCommand(unknown.toString(), null)));
 		assertThat(statusWhenSent).isEmpty();
+		verifyNoInteractions(metrics);
 	}
 
 	@Test
@@ -225,11 +237,24 @@ class ExecutePaymentServiceTest {
 				.withMessage("Invalid payment id: not-a-uuid");
 	}
 
+	// The success SLO's input (docs/episodes/bonus-08): a business "no" is not an error, no answer is.
+	@Test
+	void anExternalSystemThatIsDownCountsAsAnErrorForTheSuccessSlo() {
+		ExecutePaymentService service = new ExecutePaymentService(repository, this::authorize, payment -> true,
+				executing(payment -> {
+					throw new ExternalSystemUnavailableException("payment", new RuntimeException("connection refused"));
+				}), audit, events::add, metrics, TransactionOperations.withoutTransaction());
+
+		assertThatExceptionOfType(ExternalSystemUnavailableException.class)
+				.isThrownBy(() -> service.executePayment(command(stored.id())));
+		verify(metrics).executionEnded(Execution.ERROR);
+	}
+
 	private ExecutePaymentService serviceAnswering(Outcome outcome) {
 		return new ExecutePaymentService(repository, this::authorize, payment -> withinLimit, executing(payment -> {
 			statusWhenSent.add(payment.status());
 			return outcome;
-		}), audit, events::add, mock(PaymentMetricsPort.class), TransactionOperations.withoutTransaction());
+		}), audit, events::add, metrics, TransactionOperations.withoutTransaction());
 	}
 
 	// Execute only sends; asking about a stuck payment is reconciliation's job.

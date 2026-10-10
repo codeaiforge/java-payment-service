@@ -791,6 +791,25 @@ class PaymentEndToEndTest {
 						containsString("resilience4j_circuitbreaker_state{name=\"payment-system\",state=\"closed\"} 1.0"))));
 	}
 
+	// What the alert rules read (docs/episodes/bonus-08). Prometheus asks for OpenMetrics: only that format has exemplars.
+	@Test
+	void prometheusSeesTheSloInputsAndAnExemplarLinkingToATrace() throws Exception {
+		String paymentId = createPayment("SLO");
+		execute(paymentId);
+		awaitStatus(paymentId, "COMPLETED");
+
+		mockMvc.perform(get("/actuator/prometheus").accept(MediaType.parseMediaType("application/openmetrics-text;version=1.0.0")))
+				.andExpect(status().isOk())
+				.andExpect(content().string(allOf(
+						// The latency SLI's bucket, with the trace ID of a request that landed in it.
+						matchesPattern("(?s).*http_server_requests_seconds_bucket\\{[^}]*method=\"POST\"[^}]*uri=\"/payments\",le=\"0\\.5\"} \\d+"
+								+ " # \\{span_id=\"[0-9a-f]{16}\",trace_id=\"[0-9a-f]{32}\"}.*"),
+						matchesPattern("(?s).*payment_executions_total\\{result=\"completed\"} [1-9].*"),
+						containsString("payment_executions_total{result=\"error\"} "),
+						containsString("payments_processing_oldest_age_seconds"),
+						containsString("payment_events_pending"))));
+	}
+
 	// One payment, one trace: the request, the message on payment-processing, the consumer, and its call to the
 	// payment system, each a span with its parent, as Tempo would show it.
 	@Test

@@ -1,6 +1,6 @@
 # Bonus Episode 07 — More Than One Instance
 
-Git tag: `bonus-07-multiple-instances` · Builds on: [Bonus Episode 06 — Centralized Logs](bonus-06-centralized-logs.md)
+Git tag: `bonus-07-multiple-instances` · Builds on: [Bonus Episode 06 — Centralized Logs](bonus-06-centralized-logs.md) · Next: [Bonus Episode 08 — Alerting and SLOs](bonus-08-alerting-slos.md)
 
 ## Goal
 

@@ -20,4 +20,16 @@ public interface PaymentMetricsPort {
 
 	/** A refund reached a final status. How many, never how much. */
 	void refundFinished(RefundStatus status);
+
+	/** An attempt to execute a payment ended. The success SLO counts these (docs/episodes/bonus-08). */
+	void executionEnded(Execution result);
+
+	enum Execution {
+		/** The payment system moved the money. */
+		COMPLETED,
+		/** A business "no": not authorized, over the limit, or rejected by the payment system. Not an error. */
+		REFUSED,
+		/** No answer we could act on: an external system down, a lost answer (left PROCESSING), our own failure. */
+		ERROR
+	}
 }

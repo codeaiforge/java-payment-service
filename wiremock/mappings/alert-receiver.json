@@ -1,0 +1,9 @@
+{
+  "mappings": [
+    {
+      "name": "Alertmanager's receivers (docs/episodes/bonus-08): a pager and a ticket queue that only record what they were sent",
+      "request": { "method": "POST", "urlPathPattern": "/alerts/(page|ticket)" },
+      "response": { "status": 200 }
+    }
+  ]
+}

@@ -7,3 +7,11 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["payment-service:8080", "host.docker.internal:8080"]
+
+# The SLO and cause alerts (docs/episodes/bonus-08). What fires goes to Alertmanager, which decides who hears about it.
+rule_files:
+  - /etc/prometheus/rules/*.yml
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]

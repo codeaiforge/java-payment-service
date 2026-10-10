@@ -1,0 +1,105 @@
+# Alerts as code (docs/episodes/bonus-08). Prometheus evaluates these every minute and sends what fires to Alertmanager.
+# Tested by `promtool test rules` (PrometheusRulesTest), against src/test/resources/prometheus/payment-slo-test.yml.
+#
+# Two SLOs, over 30 days:
+#   success  99.5% of payment executions end with an answer: COMPLETED, or a business "no". Error budget 0.5%.
+#   latency  99% of POST /payments answered within 500ms. Error budget 1%.
+# Each one pages when its budget burns fast and opens a ticket when it burns slowly. The other alerts name a cause.
+# No label or annotation carries an account, amount or reference (Episode 15's rule).
+groups:
+  # The SLIs as error ratios, one per window the alerts look at. Every instance's series are summed: the SLO is the
+  # service's, not an instance's. No traffic gives no ratio (0/0), and no alert: no request has been failed.
+  - name: payment-slo-sli
+    rules:
+      - record: payment:execution_errors:ratio_rate5m
+        expr: sum(rate(payment_executions_total{result="error"}[5m])) / sum(rate(payment_executions_total[5m]))
+      - record: payment:execution_errors:ratio_rate30m
+        expr: sum(rate(payment_executions_total{result="error"}[30m])) / sum(rate(payment_executions_total[30m]))
+      - record: payment:execution_errors:ratio_rate1h
+        expr: sum(rate(payment_executions_total{result="error"}[1h])) / sum(rate(payment_executions_total[1h]))
+      - record: payment:execution_errors:ratio_rate6h
+        expr: sum(rate(payment_executions_total{result="error"}[6h])) / sum(rate(payment_executions_total[6h]))
+
+      # Slow = not in the 500ms bucket (application.properties publishes exactly that boundary).
+      - record: payment:create_slow:ratio_rate5m
+        expr: |
+          1 - sum(rate(http_server_requests_seconds_bucket{method="POST",uri="/payments",le="0.5"}[5m]))
+            / sum(rate(http_server_requests_seconds_count{method="POST",uri="/payments"}[5m]))
+      - record: payment:create_slow:ratio_rate30m
+        expr: |
+          1 - sum(rate(http_server_requests_seconds_bucket{method="POST",uri="/payments",le="0.5"}[30m]))
+            / sum(rate(http_server_requests_seconds_count{method="POST",uri="/payments"}[30m]))
+      - record: payment:create_slow:ratio_rate1h
+        expr: |
+          1 - sum(rate(http_server_requests_seconds_bucket{method="POST",uri="/payments",le="0.5"}[1h]))
+            / sum(rate(http_server_requests_seconds_count{method="POST",uri="/payments"}[1h]))
+      - record: payment:create_slow:ratio_rate6h
+        expr: |
+          1 - sum(rate(http_server_requests_seconds_bucket{method="POST",uri="/payments",le="0.5"}[6h]))
+            / sum(rate(http_server_requests_seconds_count{method="POST",uri="/payments"}[6h]))
+
+  # Multi-window burn rates. A burn rate of 1 spends the budget in exactly 30 days.
+  #   fast  14.4x over 1h and 5m: 2% of the month's budget gone in an hour. Pages.
+  #   slow   6x  over 6h and 30m: 5% gone in six hours. A ticket for working hours.
+  # The long window says it's real, the short one says it's still happening, so the alert also stops soon after.
+  - name: payment-slo-alerts
+    rules:
+      - alert: PaymentSuccessBudgetBurn
+        expr: payment:execution_errors:ratio_rate1h > 14.4 * 0.005 and payment:execution_errors:ratio_rate5m > 14.4 * 0.005
+        labels: {service: payment-service, slo: success, severity: page, window: fast}
+        annotations:
+          summary: Payment executions are failing for technical reasons; the monthly error budget will be gone in about 2 days.
+          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+      - alert: PaymentSuccessBudgetBurn
+        expr: payment:execution_errors:ratio_rate6h > 6 * 0.005 and payment:execution_errors:ratio_rate30m > 6 * 0.005
+        labels: {service: payment-service, slo: success, severity: ticket, window: slow}
+        annotations:
+          summary: Payment executions are failing for technical reasons; the monthly error budget will be gone in about 5 days.
+          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+
+      - alert: PaymentLatencyBudgetBurn
+        expr: payment:create_slow:ratio_rate1h > 14.4 * 0.01 and payment:create_slow:ratio_rate5m > 14.4 * 0.01
+        labels: {service: payment-service, slo: latency, severity: page, window: fast}
+        annotations:
+          summary: POST /payments is slower than 500ms too often; the monthly error budget will be gone in about 2 days.
+          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
+      - alert: PaymentLatencyBudgetBurn
+        expr: payment:create_slow:ratio_rate6h > 6 * 0.01 and payment:create_slow:ratio_rate30m > 6 * 0.01
+        labels: {service: payment-service, slo: latency, severity: ticket, window: slow}
+        annotations:
+          summary: POST /payments is slower than 500ms too often; the monthly error budget will be gone in about 5 days.
+          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
+
+  # Cause alerts: each names something an SLO can't see, or sees late. Tickets, never pages.
+  - name: payment-causes
+    rules:
+      # Other services aren't told about final statuses (B3). No SLO covers them. The relay runs every second, so a
+      # healthy outbox empties often; under load it may not, but then it isn't growing either. Every instance reports
+      # the same count (it is read from the table), hence max().
+      - alert: PaymentEventsOutboxLag
+        expr: max(min_over_time(payment_events_pending[10m])) > 0 and max(delta(payment_events_pending[10m])) > 0
+        labels: {service: payment-service, severity: ticket}
+        annotations:
+          summary: The payment-events outbox has not emptied in 10 minutes and is still growing.
+          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentEventsOutboxLag.md
+
+      # Names which system is down; the SLO only says customers are affected. Not "open" == 1: an open breaker lets
+      # trial calls through as soon as one arrives after 10s (half-open) and opens again if they fail, so it flips.
+      # "Never closed in a whole minute" doesn't. With no traffic the breaker stays open, and so does this alert.
+      - alert: CircuitBreakerOpen
+        expr: max by (name) (max_over_time(resilience4j_circuitbreaker_state{state="closed"}[1m])) == 0
+        for: 5m
+        labels: {service: payment-service, severity: ticket}
+        annotations:
+          summary: "The {{ $labels.name }} circuit breaker has not closed for 5 minutes: calls to it fail at once."
+          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/CircuitBreakerOpen.md
+
+      # Reconciliation should settle a lost answer within the 2m threshold plus a 1m run (application.properties).
+      # 5 more minutes means several runs have failed to, or none has run. Keep 120 in step with the threshold.
+      - alert: PaymentsStuckInProcessing
+        expr: max(payments_processing_oldest_age_seconds) > 120
+        for: 5m
+        labels: {service: payment-service, severity: ticket}
+        annotations:
+          summary: A payment has been PROCESSING for over 7 minutes; reconciliation is not settling it.
+          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentsStuckInProcessing.md

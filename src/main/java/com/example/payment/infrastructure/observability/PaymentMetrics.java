@@ -2,6 +2,7 @@ package com.example.payment.infrastructure.observability;
 
 import com.example.payment.application.port.secondary.PaymentExecutionPort;
 import com.example.payment.application.port.secondary.PaymentMetricsPort;
+import com.example.payment.application.port.secondary.PaymentMetricsPort.Execution;
 import com.example.payment.domain.valueobject.PaymentStatus;
 import com.example.payment.domain.valueobject.RefundStatus;
 import io.micrometer.core.instrument.Counter;
@@ -34,6 +35,10 @@ public class PaymentMetrics implements PaymentMetricsPort {
 		for (PaymentStatus status : PaymentStatus.values()) {
 			statusCounters.put(status, registry.counter("payments", "status", status.name().toLowerCase()));
 		}
+		// Up front too, for the SLO's rate(): a series that first appears at 1 has no increase Prometheus can see.
+		for (Execution result : Execution.values()) {
+			registry.counter("payment.executions", "result", result.name().toLowerCase());
+		}
 		this.executionDuration = registry.timer("payment.execution.duration");
 		this.accountErrors = registry.counter("external.account.errors");
 	}
@@ -56,6 +61,11 @@ public class PaymentMetrics implements PaymentMetricsPort {
 	@Override
 	public void refundFinished(RefundStatus status) {
 		registry.counter("refunds", "status", status.name().toLowerCase()).increment();
+	}
+
+	@Override
+	public void executionEnded(Execution result) {
+		registry.counter("payment.executions", "result", result.name().toLowerCase()).increment();
 	}
 
 	/** The account system gave no answer: 5xx, timeout, connection refused. */

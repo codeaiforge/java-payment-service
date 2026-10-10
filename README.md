@@ -102,13 +102,13 @@ fails the build if it does (14, 20).
 
 **Tech stack:** Java 25, Spring Boot 4.1, PostgreSQL, Flyway, Kafka, OpenFeign,
 Resilience4j, Spring Security (OAuth2 resource server), ShedLock, springdoc-openapi,
-Micrometer, OpenTelemetry, Prometheus, Grafana, Tempo, Loki, Testcontainers, WireMock,
+Micrometer, OpenTelemetry, Prometheus, Alertmanager, Grafana, Tempo, Loki, Testcontainers, WireMock,
 ArchUnit.
 
 ## Quick start
 
 Requirements: Java 25 and Docker. Maven is provided by the wrapper. The full stack (the
-service plus PostgreSQL, Kafka, WireMock, Prometheus, Grafana, Tempo and Loki) uses about
+service plus PostgreSQL, Kafka, WireMock, Prometheus, Alertmanager, Grafana, Tempo and Loki) uses about
 1 GB of memory.
 
 ```bash
@@ -153,6 +153,7 @@ Without the `Authorization` header the answer is `401`.
 | OpenAPI | <http://localhost:8080/v3/api-docs> |
 | Grafana (anonymous admin) | <http://localhost:3000> |
 | Prometheus | <http://localhost:9090> |
+| Alertmanager | <http://localhost:9093> |
 | WireMock (fake external systems) | <http://localhost:8089> |
 
 ## How to follow along
@@ -224,6 +225,7 @@ Each part builds on the one before, in order.
 | B5 | [Distributed Tracing](docs/episodes/bonus-05-distributed-tracing.md) | One trace across HTTP, Kafka, external systems and the outbox | `bonus-05-distributed-tracing` |
 | B6 | [Centralized Logs](docs/episodes/bonus-06-centralized-logs.md) | Centralized logs in Loki, linked to traces | `bonus-06-centralized-logs` |
 | B7 | [More Than One Instance](docs/episodes/bonus-07-multiple-instances.md) | Several instances: `SKIP LOCKED`, coordinated schedulers, refund reconciliation | `bonus-07-multiple-instances` |
+| B8 | [Alerting and SLOs](docs/episodes/bonus-08-alerting-slos.md) | SLOs with burn-rate alerts, one page per incident, from alert to trace | `bonus-08-alerting-slos` |
 
 ## Shortcuts in the code
 
@@ -253,8 +255,8 @@ marker `ponytail:` for the same thing.)
   - Nothing reads the dead-letter topic. A parked message is only logged
     ([17](docs/episodes/17-async-processing.md)).
   - Idempotency keys are kept forever ([10](docs/episodes/10-idempotency.md)).
-  - No alerting: metrics, traces and logs are there to look at, but nothing pages anyone
-    ([B6](docs/episodes/bonus-06-centralized-logs.md)).
+  - Alerts reach a WireMock stand-in, not a pager, and the SLO thresholds are textbook numbers,
+    not tuned on real traffic ([B8](docs/episodes/bonus-08-alerting-slos.md)).
 
 ## About
 

@@ -15,6 +15,14 @@
         "jsonBody": { "status": "SETTLED" }, "fixedDelayMilliseconds": 7000 }
     },
     {
+      "name": "A status this service doesn't know, as if the payment system had added one (docs/episodes/bonus-08)",
+      "priority": 1,
+      "request": { "method": "POST", "url": "/payment-orders",
+        "bodyPatterns": [ { "matchesJsonPath": { "expression": "$.reference", "matches": "^ON-HOLD.*" } } ] },
+      "response": { "status": 200, "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "status": "ON_HOLD" } }
+    },
+    {
       "priority": 10,
       "request": { "method": "POST", "url": "/payment-orders" },
       "response": { "status": 200, "headers": { "Content-Type": "application/json" },

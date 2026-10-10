@@ -1,5 +1,6 @@
 # Grafana Loki for local use (docs/episodes/bonus-06): one process, receives log records over OTLP/HTTP on 3100
-# (/otlp/v1/logs), keeps them on the container's disk, answers Grafana on the same port.
+# (/otlp/v1/logs), keeps them on the container's disk, answers Grafana on the same port. Its ruler evaluates the
+# log-based alerts in observability/loki/rules (docs/episodes/bonus-08).
 auth_enabled: false
 
 server:
@@ -35,3 +36,12 @@ compactor:
   working_directory: /loki/compactor
   retention_enabled: true
   delete_request_store: filesystem
+
+# Rules are read from files (the tenant's directory under /etc/loki/rules) and what fires goes to Alertmanager.
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /etc/loki/rules
+  rule_path: /loki/rules-temp
+  alertmanager_url: http://alertmanager:9093

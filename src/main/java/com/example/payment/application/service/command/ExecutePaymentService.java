@@ -12,6 +12,7 @@ import com.example.payment.application.port.secondary.PaymentEventPort;
 import com.example.payment.application.port.secondary.PaymentExecutionPort;
 import com.example.payment.application.port.secondary.PaymentLimitPort;
 import com.example.payment.application.port.secondary.PaymentMetricsPort;
+import com.example.payment.application.port.secondary.PaymentMetricsPort.Execution;
 import com.example.payment.application.port.secondary.PaymentRepository;
 import com.example.payment.application.usecase.command.ExecutePaymentCommand;
 import com.example.payment.domain.entity.Payment;
@@ -61,8 +62,33 @@ public class ExecutePaymentService implements ExecutePaymentUseCase {
 		this.transactions = transactions;
 	}
 
+	// Every attempt that got as far as executing is counted for the success SLO (docs/episodes/bonus-08). A business
+	// "no" is a good outcome; requests that never were an execution (unknown payment, executed twice) aren't counted.
 	@Override
 	public Payment executePayment(ExecutePaymentCommand command) {
+		try {
+			Payment payment = execute(command);
+			paymentMetricsPort.executionEnded(switch (payment.status()) {
+				case COMPLETED -> Execution.COMPLETED;
+				case FAILED -> Execution.REFUSED;
+				default -> Execution.ERROR; // left PROCESSING: the customer doesn't know what happened either
+			});
+			return payment;
+		}
+		catch (PaymentAuthorizationException | PaymentLimitExceededException e) {
+			paymentMetricsPort.executionEnded(Execution.REFUSED);
+			throw e;
+		}
+		catch (PaymentValidationException | PaymentNotFoundException | InvalidPaymentStateException e) {
+			throw e;
+		}
+		catch (RuntimeException e) {
+			paymentMetricsPort.executionEnded(Execution.ERROR);
+			throw e;
+		}
+	}
+
+	private Payment execute(ExecutePaymentCommand command) {
 		PaymentId paymentId;
 		try {
 			paymentId = PaymentId.of(command.paymentId());
