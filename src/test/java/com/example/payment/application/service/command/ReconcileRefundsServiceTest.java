@@ -76,7 +76,7 @@ class ReconcileRefundsServiceTest {
 		verify(metrics).refundFinished(RefundStatus.COMPLETED);
 	}
 
-	// Never received: no money went back, and the refund ID as idempotency key means a late copy can't refund later.
+	// Never received: no money went back yet, so the refund fails (the key stops a duplicate, not a delayed first order).
 	@Test
 	void aRefundThePaymentSystemNeverReceivedIsFailed() {
 		when(paymentSystem.findRefundOutcome(refund)).thenReturn(Outcome.NOT_RECEIVED);

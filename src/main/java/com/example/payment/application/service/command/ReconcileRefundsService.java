@@ -67,8 +67,9 @@ public class ReconcileRefundsService implements ReconcileRefundsUseCase {
 	private void reconcile(Refund refund) {
 		switch (paymentExecutionPort.findRefundOutcome(refund)) {
 			case EXECUTED -> refund.complete();
-			// Never received: no money went back, and the refund-ID idempotency key means a late copy can't refund
-			// later. FAILED frees the amount for a new refund.
+			// Never received: no money has gone back yet. The refund-ID idempotency key stops a duplicate order, not a
+			// delayed first one: an order still in flight can arrive after this and refund. FAILED frees the amount for
+			// a new refund, so that late order could over-refund. See B7's Known shortcuts.
 			case REJECTED, NOT_RECEIVED -> refund.fail();
 			// Still no answer: the money may have gone back. It stays PROCESSING, still counted against the payment.
 			case UNKNOWN -> {

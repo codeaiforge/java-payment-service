@@ -234,7 +234,7 @@ Correctness never depended on the lock.
 ## Refund reconciliation
 
 B4 left refunds whose answer was lost in `PROCESSING`, still counted against
-the payment, with a `ponytail:` comment pointing here. They now get the same
+the payment, with a `SHORTCUT:` comment pointing here. They now get the same
 treatment as payments.
 
 ### A separate use case
@@ -279,7 +279,7 @@ its answer was lost.
 |---|---|---|
 | `SETTLED` | `COMPLETED` | The money went back. |
 | `REJECTED` | `FAILED` | Frees the amount for a new refund. |
-| never received (404) | `FAILED` | No money moved. The refund-ID idempotency key means a late copy of the order can't refund later, so this is safe. |
+| never received (404) | `FAILED` | No money moved yet. The refund-ID idempotency key stops a duplicate order, not a delayed first one. See Known shortcuts. |
 | no answer | stays `PROCESSING` | The money may have gone back. It still counts against the payment. The next run asks again. |
 
 A settled refund is stored the way `RefundPaymentService.store` stores it: in
@@ -364,7 +364,7 @@ src/main/java/com/example/payment/
 │   ├── port/secondary/RefundRepository.java                      + findProcessingSince
 │   └── service/command/
 │       ├── ReconcileRefundsService.java                          new
-│       └── RefundPaymentService.java                             comment: the ponytail points here now
+│       └── RefundPaymentService.java                             comment: the SHORTCUT points here now
 └── infrastructure/adapter/
     ├── primary/scheduling/ReconciliationScheduler.java           + @SchedulerLock, + refunds
     └── secondary/
@@ -396,6 +396,11 @@ src/main/java/com/example/payment/
   GC, a frozen VM) for longer than `lockAtMostFor`, another instance starts a
   run alongside it. The compare-and-set keeps the outcome right. Only the
   duplicate questions come back.
+- **A very late refund order.** As B2's "very late order", and worse:
+  `FAILED` frees the amount, so if the original refund order arrives after
+  the `404` and executes, a new refund of the same amount over-refunds the
+  payment. The fix is the same: cancel the refund ID with the payment system
+  before failing it.
 
 ## Try it
 

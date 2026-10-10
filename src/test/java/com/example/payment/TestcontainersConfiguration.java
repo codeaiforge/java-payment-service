@@ -19,7 +19,7 @@ public class TestcontainersConfiguration {
 		return new PostgreSQLContainer("postgres:18-alpine");
 	}
 
-	// ponytail: also started by the @DataJpaTest slices that don't need it; split the class if that start-up shows.
+	// SHORTCUT: also started by the @DataJpaTest slices that don't need it; split the class if that start-up shows.
 	@Bean
 	@ServiceConnection
 	KafkaContainer kafka() {

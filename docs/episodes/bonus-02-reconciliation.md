@@ -100,18 +100,22 @@ GET /payment-orders/00000000-0000-4000-8000-000000000422  -> REJECTED
 GET /payment-orders/00000000-0000-4000-8000-000000000404  -> 404
 ```
 
-## Why "never received" can be failed safely
+## What failing "never received" guarantees
 
-A `404` means the order never arrived. No money moved, so `FAILED` is true.
+A `404` means the order hasn't arrived. No money has moved, so `FAILED` is
+true when we write it.
 
-Can it arrive later and pay after all? The order carries the payment ID as
-`Idempotency-Key`. The payment system keeps one outcome per key, so this
-payment can be paid at most once. And this service never sends it again:
+The order carries the payment ID as `Idempotency-Key`. The payment system
+keeps one outcome per key, so this payment can be paid at most once: a
+duplicate order is refused. And this service never sends it again:
 `fail()` makes it final, and the domain refuses `PROCESSING` from `FAILED`.
 A customer who still wants to pay creates a new payment with a new ID.
 
-The threshold gives a slow order time to arrive before we ask. See Known
-shortcuts for the case it doesn't cover.
+What the key does not stop is a *delayed first* order. If the original is
+still in flight (a proxy, a queue, a retrying load balancer) when we ask, it
+can arrive after the `404` and pay. The threshold gives a slow order time to
+arrive before we ask, which makes this unlikely, not impossible. See Known
+shortcuts.
 
 ## Finding stuck payments
 
@@ -225,11 +229,15 @@ existed since Episode 09.
   payments gets large.
 - **One query reads every stuck payment.** No paging. There should be a
   handful. Page through them if a run ever finds thousands.
-- **A very late order.** "Never received" is final. If the payment system
-  received an order more than the threshold after we sent it, and still
-  executed it, the payment would read `FAILED` while the money moved. That
-  needs the payment system to refuse orders older than some deadline, which
-  is a contract with them, not code here.
+- **A very late order.** "Never received" is final, but the idempotency key
+  only stops a duplicate, not a delayed first order. If the payment system
+  receives the original more than the threshold after we sent it and executes
+  it, the payment reads `FAILED` while the money moved. The fix: before
+  failing a `NOT_RECEIVED` payment, send the payment system a cancel for that
+  payment ID, so a late order with that key is refused, and only then mark it
+  `FAILED`. The alternatives are a payment system that tombstones keys it
+  reported as unknown, or one that refuses orders older than a deadline. All
+  three are a contract with the payment system.
 - **An open breaker on execution is still `UNKNOWN`** (Episode 16). Now it
   resolves itself: nothing was sent, so reconciliation finds `404` and the
   payment ends `FAILED` one threshold later. It does not go back to

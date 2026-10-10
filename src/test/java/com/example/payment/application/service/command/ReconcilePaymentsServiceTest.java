@@ -142,7 +142,7 @@ class ReconcilePaymentsServiceTest {
 		verify(metrics).reconciled(Outcome.REJECTED);
 	}
 
-	// No money moved, and the payment ID as idempotency key means a late copy of the order can't pay either.
+	// No money moved yet, so the payment fails (the key stops a duplicate, not a delayed first order).
 	@Test
 	void aPaymentThePaymentSystemNeverReceivedIsFailed() {
 		Payment payment = stuckPaymentAnswered(Outcome.NOT_RECEIVED);

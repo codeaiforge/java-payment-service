@@ -115,7 +115,7 @@ asks two validators, and saves. The rules are where their names say they are.
 ### The limit lives in the application, for now
 
 ```java
-// ponytail: one fixed limit in the payment's own currency; Episode 12 moves limits behind PaymentLimitPort
+// SHORTCUT: one fixed limit in the payment's own currency; Episode 12 moves limits behind PaymentLimitPort
 public static final BigDecimal MAX_AMOUNT = new BigDecimal("10000.00");
 ```
 

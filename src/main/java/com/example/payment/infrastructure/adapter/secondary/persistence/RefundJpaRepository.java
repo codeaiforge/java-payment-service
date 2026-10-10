@@ -34,6 +34,6 @@ interface RefundJpaRepository extends JpaRepository<RefundEntity, UUID> {
 
 	Optional<RefundEntity> findByIdempotencyKey(String idempotencyKey);
 
-	// ponytail: no (status, status_changed_at) index as payment has; refunds are few. Add one if this query shows.
+	// SHORTCUT: no (status, status_changed_at) index as payment has; refunds are few. Add one if this query shows.
 	List<RefundEntity> findByStatusAndStatusChangedAtLessThanEqual(String status, Instant before);
 }

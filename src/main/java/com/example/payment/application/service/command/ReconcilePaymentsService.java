@@ -49,7 +49,7 @@ public class ReconcilePaymentsService implements ReconcilePaymentsUseCase {
 		this.transactions = transactions;
 	}
 
-	// ponytail: reads every stuck payment in one query; page through them if a run ever finds thousands.
+	// SHORTCUT: reads every stuck payment in one query; page through them if a run ever finds thousands.
 	@Override
 	public void reconcilePayments(Duration threshold) {
 		for (Payment payment : paymentRepository.findProcessingSince(Instant.now().minus(threshold))) {
@@ -67,7 +67,8 @@ public class ReconcilePaymentsService implements ReconcilePaymentsUseCase {
 		Outcome outcome = paymentExecutionPort.findOutcome(payment);
 		switch (outcome) {
 			case EXECUTED -> payment.complete();
-			// Never received: no money moved, and the payment-ID idempotency key means a late order can't pay later.
+			// Never received: no money has moved yet. The payment-ID idempotency key stops a duplicate order, not a
+			// delayed first one: an order still in flight can arrive after this and pay. See B2's Known shortcuts.
 			case REJECTED, NOT_RECEIVED -> payment.fail();
 			// Still no answer: PROCESSING is still the truth. The next run asks again.
 			case UNKNOWN -> {

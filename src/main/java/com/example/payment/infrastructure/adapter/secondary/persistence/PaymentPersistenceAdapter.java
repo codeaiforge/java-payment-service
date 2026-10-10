@@ -23,7 +23,7 @@ public class PaymentPersistenceAdapter implements PaymentRepository {
 		this.jpaRepository = jpaRepository;
 	}
 
-	// ponytail: the id is assigned by the domain, so save() does SELECT then INSERT; implement Persistable if that query matters
+	// SHORTCUT: the id is assigned by the domain, so save() does SELECT then INSERT; implement Persistable if that query matters
 	@Override
 	public void save(Payment payment) {
 		jpaRepository.save(PaymentEntityMapper.toEntity(payment, Instant.now()));

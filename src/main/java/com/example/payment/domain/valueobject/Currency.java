@@ -18,7 +18,7 @@ public enum Currency {
 		}
 	}
 
-	// ponytail: all supported currencies use 2 minor units; add a field when JPY-style currencies arrive
+	// SHORTCUT: all supported currencies use 2 minor units; add a field when JPY-style currencies arrive
 	public int minorUnits() {
 		return 2;
 	}

@@ -60,7 +60,7 @@ class PaymentExecutionAdapter implements PaymentExecutionPort {
 			paymentMetrics.paymentSystemError("execution");
 			return Outcome.UNKNOWN;
 		}
-		// ponytail: an open breaker means it was certainly not sent, but it is still reported UNKNOWN;
+		// SHORTCUT: an open breaker means it was certainly not sent, but it is still reported UNKNOWN;
 		// a way back to AUTHORIZED would need a new domain transition.
 		catch (CallNotPermittedException e) {
 			log.warn("Payment system circuit breaker is open, payment {} not sent", payment.id());
