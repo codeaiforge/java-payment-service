@@ -48,12 +48,15 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -140,6 +143,9 @@ class PaymentEndToEndTest {
 
 	@Autowired
 	KafkaTemplate<String, PaymentProcessingMessage> kafkaTemplate;
+
+	@Autowired
+	KafkaTemplate<String, Object> events;
 
 	@Autowired
 	ConsumerFactory<?, ?> consumerFactory;
@@ -236,7 +242,7 @@ class PaymentEndToEndTest {
 								}
 								""").with(customer()))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.detail").value("Source account ACC-30001 is not held by the caller"));
+				.andExpect(jsonPath("$.detail").value("Account ACC-30001 is not held by the caller"));
 
 		assertThat(paymentsWithReference("Not my account")).isZero();
 	}
@@ -542,6 +548,97 @@ class PaymentEndToEndTest {
 		// Asked, never sent again.
 		externalSystems.verify(1, postRequestedFor(urlEqualTo("/refund-orders"))
 				.withRequestBody(matchingJsonPath("$.originalPaymentId", equalTo(paymentId))));
+	}
+
+	// The statement (docs/episodes/bonus-09) is built from payment-events, after the fact: await it.
+	@Test
+	void aPartRefundShowsOnTheStatement() throws Exception {
+		String paymentId = completedPayment("On the statement");
+		refund(paymentId, "40.00", customer()).andExpect(status().isCreated());
+
+		await().untilAsserted(() -> mockMvc.perform(get("/accounts/ACC-10001/statement?size=100").with(customer()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].refundedAmount".formatted(paymentId)).value(40.00))
+				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].amount".formatted(paymentId)).value(250.00))
+				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].counterpartyAccountId".formatted(paymentId)).value("ACC-20001"))
+				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].status".formatted(paymentId)).value("COMPLETED")));
+	}
+
+	// Events published straight to the topic, as the relay would, for ACC-70001: no test pays from it, and these are in
+	// 2020, so nothing else is on that page. The refund arrives twice and counts once.
+	@Test
+	void theStatementShowsPublishedEventsAndARedeliveredOneCountsOnce() throws Exception {
+		String paymentId = UUID.randomUUID().toString();
+		publishEvent(paymentId, "PAYMENT_COMPLETED", null, "100.00", "2020-03-01T10:00:00Z");
+		Map<String, Object> refund = event(paymentId, "REFUND_COMPLETED", UUID.randomUUID().toString(), "30.00",
+				"2020-03-02T10:00:00Z");
+		events.send("payment-events", paymentId, refund).join();
+		events.send("payment-events", paymentId, refund).join();
+		// Published after the duplicate, on the same partition: once it is applied, the duplicate has been read too.
+		String last = publishEvent(paymentId, "REFUND_FAILED", UUID.randomUUID().toString(), "5.00", "2020-03-03T10:00:00Z");
+		await().untilAsserted(() -> assertThat(jdbc.sql("SELECT last_event_id::text FROM statement_line WHERE payment_id = ?::uuid")
+				.param(paymentId).query(String.class).optional()).contains(last));
+
+		mockMvc.perform(get("/accounts/ACC-70001/statement?from=2020-03-01&to=2020-03-01").with(customer()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.lines.length()").value(1))
+				.andExpect(jsonPath("$.lines[0].paymentId").value(paymentId))
+				.andExpect(jsonPath("$.lines[0].refundedAmount").value(30.00))
+				.andExpect(jsonPath("$.lines[0].settledAt").value("2020-03-01T10:00:00Z"));
+	}
+
+	@Test
+	void theStatementIsFilteredAndPaged() throws Exception {
+		publishEvent(UUID.randomUUID().toString(), "PAYMENT_COMPLETED", null, "10.00", "2021-06-01T08:00:00Z");
+		publishEvent(UUID.randomUUID().toString(), "PAYMENT_FAILED", null, "20.00", "2021-06-02T08:00:00Z");
+		publishEvent(UUID.randomUUID().toString(), "PAYMENT_COMPLETED", null, "30.00", "2021-06-03T08:00:00Z");
+		publishEvent(UUID.randomUUID().toString(), "PAYMENT_COMPLETED", null, "40.00", "2021-06-04T08:00:00Z");
+		String june = "/accounts/ACC-70001/statement?from=2021-06-01&to=2021-06-03";
+		await().untilAsserted(() -> mockMvc.perform(get(june).with(customer())).andExpect(jsonPath("$.totalLines").value(3)));
+
+		mockMvc.perform(get(june + "&status=COMPLETED&size=1").with(customer()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalLines").value(2))
+				.andExpect(jsonPath("$.lines.length()").value(1))
+				.andExpect(jsonPath("$.lines[0].amount").value(30.00));
+		mockMvc.perform(get(june + "&status=COMPLETED&size=1&page=1").with(customer()))
+				.andExpect(jsonPath("$.page").value(1))
+				.andExpect(jsonPath("$.lines[0].amount").value(10.00));
+	}
+
+	@Test
+	void anotherCustomersStatementIs403() throws Exception {
+		mockMvc.perform(get("/accounts/ACC-30001/statement").with(customer()))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.detail").value("Account ACC-30001 is not held by the caller"));
+		mockMvc.perform(get("/accounts/ACC-UNKNOWN/statement").with(customer())).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void aStatementPageAboveTheCapOrABadFilterIs400() throws Exception {
+		mockMvc.perform(get("/accounts/ACC-10001/statement?size=101").with(customer()))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.detail").value("size must be between 1 and 100"));
+		mockMvc.perform(get("/accounts/ACC-10001/statement?status=PROCESSING").with(customer()))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(get("/accounts/ACC-10001/statement?from=yesterday").with(customer()))
+				.andExpect(status().isBadRequest());
+	}
+
+	/** @return the event's ID */
+	private String publishEvent(String paymentId, String type, String refundId, String amount, String occurredAt) {
+		Map<String, Object> event = event(paymentId, type, refundId, amount, occurredAt);
+		events.send("payment-events", paymentId, event).join();
+		return (String) event.get("eventId");
+	}
+
+	private static Map<String, Object> event(String paymentId, String type, String refundId, String amount,
+			String occurredAt) {
+		Map<String, Object> event = new HashMap<>(Map.of("eventId", UUID.randomUUID().toString(), "type", type,
+				"paymentId", paymentId, "sourceAccountId", "ACC-70001", "destinationAccountId", "ACC-20001",
+				"amount", new BigDecimal(amount), "currency", "EUR", "occurredAt", occurredAt));
+		event.put("refundId", refundId);
+		return event;
 	}
 
 	// Kafka delivers at least once, so the same message twice is normal. The second finds the payment past

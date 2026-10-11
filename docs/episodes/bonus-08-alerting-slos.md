@@ -1,6 +1,6 @@
 # Bonus Episode 08 — Alerting and SLOs
 
-Git tag: `bonus-08-alerting-slos` · Builds on: [Bonus Episode 07 — More Than One Instance](bonus-07-multiple-instances.md)
+Git tag: `bonus-08-alerting-slos` · Builds on: [Bonus Episode 07 — More Than One Instance](bonus-07-multiple-instances.md) · Next: [Bonus Episode 09 — Payment Statement](bonus-09-payment-statement.md)
 
 ## Goal
 

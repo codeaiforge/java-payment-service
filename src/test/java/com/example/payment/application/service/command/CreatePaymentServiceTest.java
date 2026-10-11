@@ -203,7 +203,7 @@ class CreatePaymentServiceTest {
 	void rejectsASourceAccountTheCallerDoesNotHold() {
 		assertThatExceptionOfType(AccessDeniedException.class)
 				.isThrownBy(() -> service.createPayment(command("ACC-OTHER", "ACC-ACTIVE-2", "250.00", "EUR")))
-				.withMessage("Source account ACC-OTHER is not held by the caller");
+				.withMessage("Account ACC-OTHER is not held by the caller");
 
 		assertThat(enquiries).containsExactly(new AccountId("ACC-OTHER")); // the destination isn't asked about
 		assertThat(saved).isEmpty();

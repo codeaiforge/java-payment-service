@@ -32,6 +32,7 @@ architecture driven by requirements rather than by a template.
 - Architecture rules enforced by ArchUnit tests (14)
 - Traces, metrics and logs linked end to end (15, B5, B6)
 - Safe on several instances: `FOR UPDATE SKIP LOCKED` and coordinated schedulers (B7)
+- A read model built from the service's own events, and rebuilt by replaying them (B9)
 
 ## The final system
 
@@ -63,13 +64,13 @@ stateDiagram-v2
 ```mermaid
 flowchart LR
     subgraph primary["Primary adapters"]
-        web["PaymentController<br/>(REST)"]
-        consumer["PaymentProcessingConsumer<br/>(Kafka)"]
+        web["PaymentController · StatementController<br/>(REST)"]
+        consumer["PaymentProcessingConsumer<br/>StatementProjectionConsumer<br/>(Kafka)"]
         scheduler["ReconciliationScheduler"]
     end
 
     subgraph app["Application"]
-        uc["Primary ports<br/>CreatePaymentUseCase · GetPaymentUseCase<br/>CancelPaymentUseCase · RequestPaymentExecutionUseCase<br/>ExecutePaymentUseCase · RefundPaymentUseCase · GetRefundsUseCase<br/>ReconcilePaymentsUseCase · ReconcileRefundsUseCase"]
+        uc["Primary ports<br/>CreatePaymentUseCase · GetPaymentUseCase<br/>CancelPaymentUseCase · RequestPaymentExecutionUseCase<br/>ExecutePaymentUseCase · RefundPaymentUseCase · GetRefundsUseCase<br/>ReconcilePaymentsUseCase · ReconcileRefundsUseCase<br/>GetStatementUseCase · ProjectPaymentEventUseCase"]
         services["Application services"]
         domain["Domain<br/>Payment · Refund · value objects"]
         sp["Secondary ports"]
@@ -78,7 +79,7 @@ flowchart LR
     end
 
     subgraph secondary["Secondary adapters"]
-        jpa["JPA → PostgreSQL<br/>PaymentRepository · RefundRepository<br/>IdempotencyPort · AuditPort"]
+        jpa["JPA → PostgreSQL<br/>PaymentRepository · RefundRepository<br/>StatementRepository · IdempotencyPort · AuditPort"]
         outbox["Outbox table<br/>PaymentEventPort"]
         relay["PaymentEventRelay → Kafka<br/>payment-events"]
         publisher["Kafka publisher<br/>PaymentProcessingPort"]
@@ -226,6 +227,7 @@ Each part builds on the one before, in order.
 | B6 | [Centralized Logs](docs/episodes/bonus-06-centralized-logs.md) | Centralized logs in Loki, linked to traces | `bonus-06-centralized-logs` |
 | B7 | [More Than One Instance](docs/episodes/bonus-07-multiple-instances.md) | Several instances: `SKIP LOCKED`, coordinated schedulers, refund reconciliation | `bonus-07-multiple-instances` |
 | B8 | [Alerting and SLOs](docs/episodes/bonus-08-alerting-slos.md) | SLOs with burn-rate alerts, one page per incident, from alert to trace | `bonus-08-alerting-slos` |
+| B9 | [Payment Statement](docs/episodes/bonus-09-payment-statement.md) | A read model (CQRS) fed by payment events, eventually consistent, rebuilt by replay | `bonus-09-payment-statement` |
 
 ## Shortcuts in the code
 
@@ -257,6 +259,8 @@ marker `ponytail:` for the same thing.)
   - Idempotency keys are kept forever ([10](docs/episodes/10-idempotency.md)).
   - Alerts reach a WireMock stand-in, not a pager, and the SLO thresholds are textbook numbers,
     not tuned on real traffic ([B8](docs/episodes/bonus-08-alerting-slos.md)).
+  - `payment-events` is kept forever so the statement can be rebuilt; there is no snapshot
+    to let it shrink ([B9](docs/episodes/bonus-09-payment-statement.md)).
 
 ## About
 

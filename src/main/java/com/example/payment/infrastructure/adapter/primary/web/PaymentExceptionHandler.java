@@ -30,8 +30,8 @@ class PaymentExceptionHandler {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 	}
 
-	// Only for creating from an account the caller doesn't hold. Another customer's payment is a 404
-	// (PaymentNotFoundException), so the API doesn't reveal which payment IDs exist.
+	// Only for an account the caller doesn't hold: paying from it, or reading its statement. Another customer's payment
+	// is a 404 (PaymentNotFoundException), so the API doesn't reveal which payment IDs exist.
 	@ExceptionHandler(AccessDeniedException.class)
 	ProblemDetail forbidden(AccessDeniedException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());

@@ -51,7 +51,7 @@ class AccountStateValidatorTest {
 	void rejectsASourceTheCallerDoesNotHold() {
 		assertThatExceptionOfType(AccessDeniedException.class)
 				.isThrownBy(() -> validator.validate(SOMEONE_ELSES, ACTIVE, CUSTOMER))
-				.withMessage("Source account ACC-4 is not held by the caller");
+				.withMessage("Account ACC-4 is not held by the caller");
 	}
 
 	// Checked before the state, so the caller can't learn that someone else's account is blocked.

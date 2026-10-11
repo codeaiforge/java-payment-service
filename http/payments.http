@@ -568,3 +568,19 @@ Content-Type: application/json
 
 ### Bonus 04 — refund counters -> refunds_total{status="completed"}
 GET {{baseUrl}}/actuator/prometheus
+
+### Bonus 09 — ACC-10001's statement -> 200, settled payments newest first, with what was refunded of each
+GET {{baseUrl}}/accounts/ACC-10001/statement
+Authorization: Bearer {{token}}
+
+### Bonus 09 — only COMPLETED ones, 5 per page, the second page (from= and to= take days: 2026-10-10)
+GET {{baseUrl}}/accounts/ACC-10001/statement?status=COMPLETED&size=5&page=1
+Authorization: Bearer {{token}}
+
+### Bonus 09 — CUST-2002 asks for it -> 403
+GET {{baseUrl}}/accounts/ACC-10001/statement
+Authorization: Bearer {{otherToken}}
+
+### Bonus 09 — more than 100 per page -> 400
+GET {{baseUrl}}/accounts/ACC-10001/statement?size=500
+Authorization: Bearer {{token}}
