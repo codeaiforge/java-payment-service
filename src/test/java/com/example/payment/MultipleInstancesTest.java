@@ -11,6 +11,11 @@ import com.example.payment.domain.valueobject.PaymentId;
 import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.PaymentStatus;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import io.apicurio.registry.serde.avro.AvroKafkaDeserializer;
 import io.apicurio.registry.serde.config.SerdeConfig;
 import org.apache.avro.generic.GenericRecord;
@@ -31,6 +36,11 @@ import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -53,6 +63,8 @@ import static org.awaitility.Awaitility.await;
  * systems. Nothing in either instance knows about the other; they only meet in the database.
  *
  * The relays run often with small batches, so they are usually both claiming at the same moment.
+ *
+ * Requests go over real HTTP to each instance's own port, with a token signed with the local key.
  */
 class MultipleInstancesTest {
 
@@ -155,6 +167,43 @@ class MultipleInstancesTest {
 
 		await().during(Duration.ofSeconds(1)).untilAsserted(() -> stuck.forEach(id ->
 				externalSystems.verify(1, getRequestedFor(urlEqualTo("/payment-orders/" + id)))));
+	}
+
+	// 10 payments a minute per customer (application.properties), taken from one bucket in PostgreSQL. With a bucket in
+	// each instance's memory, alternating instances would get 10 through each, 20 in all.
+	@Test
+	void thePaymentLimitHoldsAcrossBothInstances() throws Exception {
+		String token = signedToken(first.getEnvironment().getProperty("payment.security.local-jwt-secret"));
+		List<Integer> statuses = new ArrayList<>();
+		for (int i = 0; i < 12; i++) {
+			statuses.add(createPayment(i % 2 == 0 ? first : second, token));
+		}
+
+		assertThat(statuses).containsExactly(201, 201, 201, 201, 201, 201, 201, 201, 201, 201, 429, 429);
+	}
+
+	private static int createPayment(ConfigurableApplicationContext instance, String token) throws Exception {
+		HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:%s/payments"
+						.formatted(instance.getEnvironment().getProperty("local.server.port"))))
+				.header("Authorization", "Bearer " + token)
+				.header("Idempotency-Key", UUID.randomUUID().toString())
+				.header("Content-Type", "application/json")
+				.POST(HttpRequest.BodyPublishers.ofString("""
+						{"sourceAccountId": "ACC-10001", "destinationAccountId": "ACC-20001", "amount": 250.00,
+						 "currency": "EUR", "reference": "Rate limited across instances"}
+						"""))
+				.build();
+		try (HttpClient client = HttpClient.newHttpClient()) {
+			return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+		}
+	}
+
+	// What an identity provider would issue for CUST-1001, signed with the local key both instances accept.
+	private static String signedToken(String key) throws Exception {
+		SignedJWT token = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256),
+				new JWTClaimsSet.Builder().subject("CUST-1001").build());
+		token.sign(new MACSigner(key.getBytes(StandardCharsets.UTF_8)));
+		return token.serialize();
 	}
 
 	private static Payment storedPayment(PaymentStatus status) {

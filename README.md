@@ -35,6 +35,7 @@ architecture driven by requirements rather than by a template.
 - A read model built from the service's own events, and rebuilt by replaying them (B9)
 - Event contracts that evolve without breaking consumers: Avro, a schema registry, compatibility checked in the build (B10)
 - Calling customers' URLs safely: signed webhooks, durable retries, and no way into our own network (B11)
+- Rate limits per customer that hold across instances, with token buckets in PostgreSQL (B12)
 
 ## The final system
 
@@ -66,7 +67,7 @@ stateDiagram-v2
 ```mermaid
 flowchart LR
     subgraph primary["Primary adapters"]
-        web["PaymentController · StatementController<br/>WebhookController (REST)"]
+        web["RateLimitFilter →<br/>PaymentController · StatementController<br/>WebhookController (REST)"]
         consumer["PaymentProcessingConsumer<br/>StatementProjectionConsumer<br/>WebhookDeliveryConsumer (Kafka)"]
         scheduler["ReconciliationScheduler<br/>WebhookDispatchScheduler"]
     end
@@ -108,7 +109,7 @@ Dependencies point inwards. The domain imports no Spring, JPA or Feign, and Arch
 fails the build if it does (14, 20).
 
 **Tech stack:** Java 25, Spring Boot 4.1, PostgreSQL, Flyway, Kafka, Avro, Apicurio Registry, OpenFeign, Apache HttpClient,
-Resilience4j, Spring Security (OAuth2 resource server), ShedLock, springdoc-openapi,
+Resilience4j, Spring Security (OAuth2 resource server), Bucket4j, ShedLock, springdoc-openapi,
 Micrometer, OpenTelemetry, Prometheus, Alertmanager, Grafana, Tempo, Loki, Testcontainers, WireMock,
 ArchUnit.
 
@@ -236,6 +237,7 @@ Each part builds on the one before, in order.
 | B9 | [Payment Statement](docs/episodes/bonus-09-payment-statement.md) | A read model (CQRS) fed by payment events, eventually consistent, rebuilt by replay | `bonus-09-payment-statement` |
 | B10 | [Versioned Event Schemas](docs/episodes/bonus-10-event-schemas.md) | Avro with a schema registry; a change that breaks a consumer fails the build | `bonus-10-event-schemas` |
 | B11 | [Webhooks](docs/episodes/bonus-11-webhooks.md) | Signed webhooks with durable retries; customer URLs kept out of our network (SSRF) | `bonus-11-webhooks` |
+| B12 | [Rate Limits per Customer](docs/episodes/bonus-12-rate-limits.md) | Token buckets per customer, shared by every instance; `429` with `Retry-After`; fail open | `bonus-12-rate-limits` |
 
 ## Shortcuts in the code
 
@@ -273,6 +275,8 @@ marker `ponytail:` for the same thing.)
     for them ([B10](docs/episodes/bonus-10-event-schemas.md)).
   - Webhook secrets are stored unencrypted and can't be rotated
     ([B11](docs/episodes/bonus-11-webhooks.md)).
+  - Rate limits are the same for every customer, and nothing limits requests per IP address
+    before authentication ([B12](docs/episodes/bonus-12-rate-limits.md)).
 
 ## About
 

@@ -624,3 +624,22 @@ Content-Type: application/json
 ### Bonus 11 — delete one (its webhookId from the list) -> 204; another customer's -> 404
 DELETE {{baseUrl}}/webhooks/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{token}}
+
+### Bonus 12 — every answer carries RateLimit-Policy and RateLimit: the limits, and what is left of each
+GET {{baseUrl}}/accounts/ACC-10001/statement
+Authorization: Bearer {{token}}
+
+### Bonus 12 — the same retry 11 times within a minute -> 201 ten times, then 429 with Retry-After.
+### A retry with the same key is a request like any other. CUST-2002 is unaffected.
+POST {{baseUrl}}/payments
+Authorization: Bearer {{token}}
+Idempotency-Key: bonus-12-request-1
+Content-Type: application/json
+
+{
+  "sourceAccountId": "ACC-10001",
+  "destinationAccountId": "ACC-20001",
+  "amount": 5.00,
+  "currency": "EUR",
+  "reference": "Rate limit"
+}

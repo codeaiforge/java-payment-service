@@ -207,6 +207,13 @@ class PaymentEndToEndTest {
 
 	// An endpoint hears of every payment of its customer that settles while it is registered: each test's are gone after
 	// it, so they don't collect later tests' payments, or retry against stubs WireMock has since forgotten.
+	// Every test starts with full rate-limit buckets: CUST-1001 creates payments in nearly every test, far more than
+	// 10 a minute across the class.
+	@BeforeEach
+	void fillRateLimitBuckets() {
+		jdbc.sql("DELETE FROM rate_limit_bucket").update();
+	}
+
 	@AfterEach
 	void deleteWebhooks() {
 		jdbc.sql("DELETE FROM webhook_subscription").update();
@@ -975,6 +982,51 @@ class PaymentEndToEndTest {
 		}
 		assertThat(paymentIds).hasSize(1);
 		assertThat(paymentsWithReference("Concurrent duplicate")).isEqualTo(1);
+	}
+
+	// 10 payments a minute (application.properties). The 11th is refused before anything is looked up or stored.
+	@Test
+	void theEleventhPaymentInAMinuteIs429AndCreatesNoPayment() throws Exception {
+		for (int i = 0; i < 10; i++) {
+			createWithKey(UUID.randomUUID().toString(), paymentWithReference("Rate limited"))
+					.andExpect(status().isCreated());
+		}
+		int accountLookups = externalSystems.findAll(getRequestedFor(urlEqualTo("/accounts/ACC-10001"))).size();
+
+		createWithKey(UUID.randomUUID().toString(), paymentWithReference("Rate limited"))
+				.andExpect(status().isTooManyRequests())
+				.andExpect(header().string("Retry-After", matchesPattern("[1-6]")))
+				.andExpect(header().string("RateLimit", containsString("\"payments\";r=0")))
+				.andExpect(header().string("RateLimit-Policy", containsString("\"payments\";q=10;w=60")))
+				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(429))
+				.andExpect(jsonPath("$.title").value("Too Many Requests"));
+
+		assertThat(paymentsWithReference("Rate limited")).isEqualTo(10);
+		assertThat(externalSystems.findAll(getRequestedFor(urlEqualTo("/accounts/ACC-10001")))).hasSize(accountLookups);
+		mockMvc.perform(get("/actuator/prometheus"))
+				// At least 1: the retry test may have been refused here first.
+				.andExpect(content().string(matchesPattern("(?s).*rate_limit_rejected_total\\{limit=\"payments\"} [1-9].*")));
+		// Another customer still has their own 10.
+		mockMvc.perform(post("/payments").header("Idempotency-Key", UUID.randomUUID().toString())
+						.contentType(MediaType.APPLICATION_JSON).content(paymentWithReference("Rate limited")
+								.replace("ACC-10001", "ACC-30001")).with(otherCustomer()))
+				.andExpect(status().isCreated());
+	}
+
+	// A retry is a request like any other: the limit protects the service, and a retry costs it a request too. A script
+	// retrying one key in a loop is exactly what the limit is for. A client that retries with backoff stays far below it.
+	@Test
+	void retriesWithTheSameIdempotencyKeyCountTowardsThePaymentLimit() throws Exception {
+		String key = UUID.randomUUID().toString();
+		String body = paymentWithReference("Retried until limited");
+		for (int i = 0; i < 10; i++) {
+			createWithKey(key, body).andExpect(status().isCreated());
+		}
+
+		createWithKey(key, body).andExpect(status().isTooManyRequests());
+
+		assertThat(paymentsWithReference("Retried until limited")).isEqualTo(1);
 	}
 
 	private ResultActions createWithKey(String key, String body) throws Exception {
