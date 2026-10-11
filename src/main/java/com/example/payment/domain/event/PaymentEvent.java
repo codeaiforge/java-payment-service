@@ -5,6 +5,7 @@ import com.example.payment.domain.entity.Refund;
 import com.example.payment.domain.valueobject.AccountId;
 import com.example.payment.domain.valueobject.Money;
 import com.example.payment.domain.valueobject.PaymentId;
+import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.RefundId;
 
 import java.time.Instant;
@@ -20,9 +21,15 @@ import java.util.UUID;
  *
  * A refund event names the refund too ({@code refundId}, null for a payment's
  * own events) and carries the refund's amount, not the payment's.
+ *
+ * Every event carries the payment's {@code reference}, so a consumer can show
+ * it (docs/episodes/bonus-10). It is free text the payer wrote: fine in an
+ * event, which exists to tell consumers what they need, but still never in a
+ * log line, metric or span. Null on an event published before events had it.
  */
 public record PaymentEvent(UUID eventId, PaymentEventType type, PaymentId paymentId, RefundId refundId,
-		AccountId sourceAccountId, AccountId destinationAccountId, Money amount, Instant occurredAt) {
+		AccountId sourceAccountId, AccountId destinationAccountId, Money amount, PaymentReference reference,
+		Instant occurredAt) {
 
 	public PaymentEvent {
 		Objects.requireNonNull(eventId, "Event id is required");
@@ -44,7 +51,7 @@ public record PaymentEvent(UUID eventId, PaymentEventType type, PaymentId paymen
 					"Payment " + payment.id() + " is " + payment.status() + ", not final: no event");
 		};
 		return new PaymentEvent(UUID.randomUUID(), type, payment.id(), null, payment.sourceAccountId(),
-				payment.destinationAccountId(), payment.amount(), occurredAt);
+				payment.destinationAccountId(), payment.amount(), payment.reference(), occurredAt);
 	}
 
 	/** The event for a refund of this payment that has just reached a final status. */
@@ -59,6 +66,6 @@ public record PaymentEvent(UUID eventId, PaymentEventType type, PaymentId paymen
 					"Refund " + refund.id() + " is PROCESSING, not final: no event");
 		};
 		return new PaymentEvent(UUID.randomUUID(), type, payment.id(), refund.id(), payment.sourceAccountId(),
-				payment.destinationAccountId(), refund.amount(), occurredAt);
+				payment.destinationAccountId(), refund.amount(), payment.reference(), occurredAt);
 	}
 }

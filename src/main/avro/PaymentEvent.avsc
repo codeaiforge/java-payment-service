@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "PaymentEvent",
+  "namespace": "com.example.payment.events",
+  "doc": "A payment, or one of its refunds, reached a status it never leaves. The value of every message on payment-events, keyed by paymentId. Delivered at least once: deduplicate by eventId. Evolved under FULL_TRANSITIVE compatibility (docs/episodes/bonus-10): fields are added with a default, never renamed, never removed.",
+  "fields": [
+    {"name": "eventId", "type": "string", "doc": "Unique per fact. The same eventId twice is the same event delivered twice."},
+    {"name": "type", "type": {"type": "enum", "name": "PaymentEventType", "symbols": ["PAYMENT_COMPLETED", "PAYMENT_FAILED", "PAYMENT_CANCELLED", "REFUND_COMPLETED", "REFUND_FAILED"]}},
+    {"name": "paymentId", "type": "string"},
+    {"name": "refundId", "type": ["null", "string"], "default": null, "doc": "The refund a REFUND_ event is about; null for the payment's own events."},
+    {"name": "sourceAccountId", "type": "string"},
+    {"name": "destinationAccountId", "type": "string"},
+    {"name": "amount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 19, "scale": 2}, "doc": "The payment's amount, or for a refund event the refund's."},
+    {"name": "currency", "type": "string", "doc": "ISO 4217 code. A string, not an enum: a currency added later must not break readers."},
+    {"name": "occurredAt", "type": {"type": "long", "logicalType": "timestamp-micros"}},
+    {"name": "reference", "type": ["null", "string"], "default": null, "doc": "The payment's reference, free text the payer wrote (at most 140 characters). Null on events published before it was added."}
+  ]
+}

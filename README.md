@@ -33,6 +33,7 @@ architecture driven by requirements rather than by a template.
 - Traces, metrics and logs linked end to end (15, B5, B6)
 - Safe on several instances: `FOR UPDATE SKIP LOCKED` and coordinated schedulers (B7)
 - A read model built from the service's own events, and rebuilt by replaying them (B9)
+- Event contracts that evolve without breaking consumers: Avro, a schema registry, compatibility checked in the build (B10)
 
 ## The final system
 
@@ -81,7 +82,7 @@ flowchart LR
     subgraph secondary["Secondary adapters"]
         jpa["JPA → PostgreSQL<br/>PaymentRepository · RefundRepository<br/>StatementRepository · IdempotencyPort · AuditPort"]
         outbox["Outbox table<br/>PaymentEventPort"]
-        relay["PaymentEventRelay → Kafka<br/>payment-events"]
+        relay["PaymentEventRelay → Kafka<br/>payment-events (Avro)"]
         publisher["Kafka publisher<br/>PaymentProcessingPort"]
         feign["Feign → external systems<br/>AccountEnquiryPort · PaymentAuthorizationPort<br/>PaymentLimitPort · PaymentExecutionPort"]
         metrics["Micrometer<br/>PaymentMetricsPort"]
@@ -101,7 +102,7 @@ flowchart LR
 Dependencies point inwards. The domain imports no Spring, JPA or Feign, and ArchUnit
 fails the build if it does (14, 20).
 
-**Tech stack:** Java 25, Spring Boot 4.1, PostgreSQL, Flyway, Kafka, OpenFeign,
+**Tech stack:** Java 25, Spring Boot 4.1, PostgreSQL, Flyway, Kafka, Avro, Apicurio Registry, OpenFeign,
 Resilience4j, Spring Security (OAuth2 resource server), ShedLock, springdoc-openapi,
 Micrometer, OpenTelemetry, Prometheus, Alertmanager, Grafana, Tempo, Loki, Testcontainers, WireMock,
 ArchUnit.
@@ -109,8 +110,8 @@ ArchUnit.
 ## Quick start
 
 Requirements: Java 25 and Docker. Maven is provided by the wrapper. The full stack (the
-service plus PostgreSQL, Kafka, WireMock, Prometheus, Alertmanager, Grafana, Tempo and Loki) uses about
-1 GB of memory.
+service plus PostgreSQL, Kafka, a schema registry, WireMock, Prometheus, Alertmanager, Grafana, Tempo and
+Loki) uses about 1.5 GB of memory.
 
 ```bash
 ./mvnw verify                             # build and run all tests
@@ -228,6 +229,7 @@ Each part builds on the one before, in order.
 | B7 | [More Than One Instance](docs/episodes/bonus-07-multiple-instances.md) | Several instances: `SKIP LOCKED`, coordinated schedulers, refund reconciliation | `bonus-07-multiple-instances` |
 | B8 | [Alerting and SLOs](docs/episodes/bonus-08-alerting-slos.md) | SLOs with burn-rate alerts, one page per incident, from alert to trace | `bonus-08-alerting-slos` |
 | B9 | [Payment Statement](docs/episodes/bonus-09-payment-statement.md) | A read model (CQRS) fed by payment events, eventually consistent, rebuilt by replay | `bonus-09-payment-statement` |
+| B10 | [Versioned Event Schemas](docs/episodes/bonus-10-event-schemas.md) | Avro with a schema registry; a change that breaks a consumer fails the build | `bonus-10-event-schemas` |
 
 ## Shortcuts in the code
 
@@ -261,6 +263,8 @@ marker `ponytail:` for the same thing.)
     not tuned on real traffic ([B8](docs/episodes/bonus-08-alerting-slos.md)).
   - `payment-events` is kept forever so the statement can be rebuilt; there is no snapshot
     to let it shrink ([B9](docs/episodes/bonus-09-payment-statement.md)).
+  - JSON events already on `payment-events` can't be read as Avro; there is no cutover
+    for them ([B10](docs/episodes/bonus-10-event-schemas.md)).
 
 ## About
 

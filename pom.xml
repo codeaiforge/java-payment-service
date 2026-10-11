@@ -24,6 +24,8 @@
 		<!-- The instrumentation release built on the OpenTelemetry SDK Boot manages (1.62.0). Boot doesn't manage it. -->
 		<opentelemetry-instrumentation.version>2.28.1-alpha</opentelemetry-instrumentation.version>
 		<shedlock.version>7.10.1</shedlock.version>
+		<apicurio-registry.version>3.3.3</apicurio-registry.version>
+		<avro.version>1.12.2</avro.version>
 	</properties>
 
 	<dependencyManagement>
@@ -124,6 +126,19 @@
 			<artifactId>shedlock-provider-jdbc-template</artifactId>
 			<version>${shedlock.version}</version>
 		</dependency>
+		<!-- Avro on payment-events, with its schemas in Apicurio Registry (docs/episodes/bonus-10). -->
+		<dependency>
+			<groupId>io.apicurio</groupId>
+			<artifactId>apicurio-registry-avro-serde-kafka</artifactId>
+			<version>${apicurio-registry.version}</version>
+			<!-- Its registry client tries Vert.x first, then the JDK's HttpClient. The JDK's is enough, without Vert.x and Netty. -->
+			<exclusions>
+				<exclusion>
+					<groupId>io.apicurio</groupId>
+					<artifactId>apicurio-registry-java-sdk-adapter-vertx</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
@@ -206,6 +221,23 @@
 				<configuration>
 					<profiles>local</profiles>
 				</configuration>
+			</plugin>
+			<!-- Java classes from the event schemas in src/main/avro, generated before compiling (docs/episodes/bonus-10). -->
+			<plugin>
+				<groupId>org.apache.avro</groupId>
+				<artifactId>avro-maven-plugin</artifactId>
+				<version>${avro.version}</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>schema</goal>
+						</goals>
+						<configuration>
+							<stringType>String</stringType>
+							<enableDecimalLogicalType>true</enableDecimalLogicalType>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>

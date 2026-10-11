@@ -584,3 +584,13 @@ Authorization: Bearer {{otherToken}}
 ### Bonus 09 — more than 100 per page -> 400
 GET {{baseUrl}}/accounts/ACC-10001/statement?size=500
 Authorization: Bearer {{token}}
+
+### Bonus 10 — ACC-10001's statement -> each line now has "reference" (null for payments settled before Bonus 10)
+GET {{baseUrl}}/accounts/ACC-10001/statement
+Authorization: Bearer {{token}}
+
+### Bonus 10 — the versions of payment-events' schema in the registry (the relay registers it on its first send)
+GET http://localhost:8085/apis/registry/v3/groups/default/artifacts/payment-events-value/versions
+
+### Bonus 10 — the latest one: the schema in src/main/avro/PaymentEvent.avsc
+GET http://localhost:8085/apis/registry/v3/groups/default/artifacts/payment-events-value/versions/branch=latest/content

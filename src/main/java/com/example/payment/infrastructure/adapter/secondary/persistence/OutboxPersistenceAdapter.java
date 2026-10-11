@@ -7,6 +7,7 @@ import com.example.payment.domain.valueobject.AccountId;
 import com.example.payment.domain.valueobject.Currency;
 import com.example.payment.domain.valueobject.Money;
 import com.example.payment.domain.valueobject.PaymentId;
+import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.RefundId;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
@@ -51,7 +52,8 @@ public class OutboxPersistenceAdapter implements PaymentEventPort {
 		jpaRepository.save(new OutboxEntity(event.eventId(), event.type().name(), event.paymentId().value(),
 				event.refundId() == null ? null : event.refundId().value(), event.sourceAccountId().value(),
 				event.destinationAccountId().value(), event.amount().amount(),
-				event.amount().currency().name(), event.occurredAt(), currentTraceparent()));
+				event.amount().currency().name(), event.reference() == null ? null : event.reference().value(),
+				event.occurredAt(), currentTraceparent()));
 	}
 
 	/**
@@ -64,7 +66,8 @@ public class OutboxPersistenceAdapter implements PaymentEventPort {
 						PaymentEventType.valueOf(row.getEventType()), new PaymentId(row.getPaymentId()),
 						row.getRefundId() == null ? null : new RefundId(row.getRefundId()),
 						new AccountId(row.getSourceAccountId()), new AccountId(row.getDestinationAccountId()),
-						new Money(row.getAmount(), Currency.of(row.getCurrency())), row.getOccurredAt()),
+						new Money(row.getAmount(), Currency.of(row.getCurrency())),
+						row.getReference() == null ? null : new PaymentReference(row.getReference()), row.getOccurredAt()),
 						row.getTraceContext()))
 				.toList();
 	}

@@ -1,5 +1,6 @@
 package com.example.payment.infrastructure.adapter.secondary.messaging;
 
+import com.example.payment.events.PaymentEvent;
 import com.example.payment.infrastructure.adapter.secondary.persistence.OutboxPersistenceAdapter;
 import com.example.payment.infrastructure.adapter.secondary.persistence.OutboxPersistenceAdapter.Pending;
 import io.micrometer.core.instrument.Gauge;
@@ -10,7 +11,6 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -18,7 +18,6 @@ import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.CompletionException;
 
 /**
  * Moves events from the outbox table to Kafka. Not a primary adapter: it calls
@@ -45,13 +44,13 @@ class PaymentEventRelay {
 	private static final int CLEANUP_BATCH_SIZE = 1000;
 
 	private final OutboxPersistenceAdapter outbox;
-	private final KafkaTemplate<String, PaymentEventMessage> kafkaTemplate;
+	private final KafkaTemplate<String, PaymentEvent> kafkaTemplate;
 	private final int batchSize;
 	private final Duration retention;
 	private final Tracer tracer;
 	private final TransactionOperations transactions;
 
-	PaymentEventRelay(OutboxPersistenceAdapter outbox, KafkaTemplate<String, PaymentEventMessage> kafkaTemplate,
+	PaymentEventRelay(OutboxPersistenceAdapter outbox, KafkaTemplate<String, PaymentEvent> kafkaTemplate,
 			@Value("${payment.events.relay-batch-size}") int batchSize, @Value("${payment.events.retention}") Duration retention,
 			MeterRegistry registry, Tracer tracer, TransactionOperations transactions) {
 		this.outbox = outbox;
@@ -79,9 +78,11 @@ class PaymentEventRelay {
 			try (Tracer.SpanInScope scope = tracer.withSpan(span)) {
 				kafkaTemplate.send(PaymentEventMessage.TOPIC, key, PaymentEventMessage.from(pending.event())).join();
 			}
-			// Stop here: the broker is likely down, and each further send would wait out its deadline holding the claim.
-			// What was sent so far commits as published. This payment's later events aren't claimable until this one is.
-			catch (CompletionException | KafkaException e) {
+			// Stop here: the broker or the schema registry is likely down, or the registry refused the schema
+			// (docs/episodes/bonus-10), and each further send would fail the same way, or wait out its deadline holding the
+			// claim. What was sent so far commits as published. This payment's later events aren't claimable until this one is.
+			// RuntimeException, not only KafkaException: the registry's errors come straight out of send(), unwrapped.
+			catch (RuntimeException e) {
 				span.error(e);
 				log.warn("Event {} not published, will retry on the next run: {}", pending.event().eventId(), e.getMessage());
 				return;

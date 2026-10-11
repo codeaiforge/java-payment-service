@@ -6,6 +6,7 @@ import com.example.payment.application.port.secondary.StatementRepository.Statem
 import com.example.payment.domain.valueobject.AccountId;
 import com.example.payment.domain.valueobject.Currency;
 import com.example.payment.domain.valueobject.PaymentId;
+import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.PaymentStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +47,7 @@ class StatementPersistenceAdapterTest {
 		StatementLine line = line(ACCOUNT, PaymentStatus.COMPLETED, DAY);
 		adapter.save(line);
 		StatementLine refunded = new StatementLine(line.paymentId(), line.accountId(), line.counterpartyAccountId(),
-				line.amount(), line.currency(), line.status(), new BigDecimal("40.00"), line.settledAt(), UUID.randomUUID());
+				line.amount(), line.currency(), line.reference(), line.status(), new BigDecimal("40.00"), line.settledAt(), UUID.randomUUID());
 
 		adapter.save(refunded);
 
@@ -83,7 +84,7 @@ class StatementPersistenceAdapterTest {
 	// A refund's event came first: the line exists, but the payment's own event hasn't filled it in yet.
 	@Test
 	void aLineNotSettledYetIsLeftOut() {
-		save(new StatementLine(PaymentId.newId(), ACCOUNT, new AccountId("ACC-2"), null, Currency.EUR, null,
+		save(new StatementLine(PaymentId.newId(), ACCOUNT, new AccountId("ACC-2"), null, Currency.EUR, null, null,
 				new BigDecimal("40.00"), null, UUID.randomUUID()));
 
 		assertThat(adapter.find(ACCOUNT, SETTLED, Instant.EPOCH, DAY.plusSeconds(86400), 0, 20).totalLines()).isZero();
@@ -96,6 +97,6 @@ class StatementPersistenceAdapterTest {
 
 	private static StatementLine line(AccountId account, PaymentStatus status, Instant settledAt) {
 		return new StatementLine(PaymentId.newId(), account, new AccountId("ACC-9"), new BigDecimal("250.00"), Currency.EUR,
-				status, new BigDecimal("0.00"), settledAt, UUID.randomUUID());
+				new PaymentReference("Invoice 12345"), status, new BigDecimal("0.00"), settledAt, UUID.randomUUID());
 	}
 }

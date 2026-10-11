@@ -4,6 +4,7 @@ import com.example.payment.application.port.secondary.StatementRepository;
 import com.example.payment.domain.valueobject.AccountId;
 import com.example.payment.domain.valueobject.Currency;
 import com.example.payment.domain.valueobject.PaymentId;
+import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.PaymentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -42,7 +43,7 @@ public class StatementPersistenceAdapter implements StatementRepository {
 	public void save(StatementLine line) {
 		jpaRepository.save(new StatementLineEntity(line.paymentId().value(), line.accountId().value(),
 				line.counterpartyAccountId().value(), line.amount(), line.currency().name(),
-				line.status() == null ? null : line.status().name(), line.refundedAmount(), line.settledAt(),
+				line.reference() == null ? null : line.reference().value(), line.status() == null ? null : line.status().name(), line.refundedAmount(), line.settledAt(),
 				line.lastEventId()));
 	}
 
@@ -58,6 +59,7 @@ public class StatementPersistenceAdapter implements StatementRepository {
 	private static StatementLine toLine(StatementLineEntity row) {
 		return new StatementLine(new PaymentId(row.getPaymentId()), new AccountId(row.getAccountId()),
 				new AccountId(row.getCounterpartyAccountId()), row.getAmount(), Currency.of(row.getCurrency()),
+				row.getReference() == null ? null : new PaymentReference(row.getReference()),
 				row.getStatus() == null ? null : PaymentStatus.valueOf(row.getStatus()), row.getRefundedAmount(),
 				row.getSettledAt(), row.getLastEventId());
 	}

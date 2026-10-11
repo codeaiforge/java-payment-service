@@ -7,6 +7,7 @@ import com.example.payment.domain.valueobject.AccountId;
 import com.example.payment.domain.valueobject.Currency;
 import com.example.payment.domain.valueobject.Money;
 import com.example.payment.domain.valueobject.PaymentId;
+import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.PaymentStatus;
 import com.example.payment.domain.valueobject.RefundId;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class ProjectPaymentEventServiceTest {
 
 	private static final PaymentId PAYMENT = PaymentId.newId();
 	private static final Instant SETTLED_AT = Instant.parse("2026-10-10T12:00:00Z");
+	private static final PaymentReference REFERENCE = new PaymentReference("Invoice 12345");
 
 	private final InMemoryStatement statement = new InMemoryStatement();
 	private final ProjectPaymentEventService service = new ProjectPaymentEventService(statement,
@@ -40,7 +42,7 @@ class ProjectPaymentEventServiceTest {
 		service.project(completed);
 
 		assertThat(line()).isEqualTo(new StatementRepository.StatementLine(PAYMENT, new AccountId("ACC-1"),
-				new AccountId("ACC-2"), new BigDecimal("250.00"), Currency.EUR, PaymentStatus.COMPLETED,
+				new AccountId("ACC-2"), new BigDecimal("250.00"), Currency.EUR, REFERENCE, PaymentStatus.COMPLETED,
 				new BigDecimal("0.00"), SETTLED_AT, completed.eventId()));
 	}
 
@@ -101,18 +103,43 @@ class ProjectPaymentEventServiceTest {
 		assertThat(line().refundedAmount()).isEqualByComparingTo("100.00");
 	}
 
+	// Events published before they carried a reference have none (docs/episodes/bonus-10). A refund event can come first.
+	@Test
+	void theReferenceComesFromWhicheverEventHasOne() {
+		service.project(refundEvent(PaymentEventType.REFUND_COMPLETED, "100.00", null));
+
+		assertThat(line().reference()).isNull();
+
+		service.project(paymentEvent(PaymentEventType.PAYMENT_COMPLETED));
+
+		assertThat(line().reference()).isEqualTo(REFERENCE);
+	}
+
+	@Test
+	void anEventWithoutAReferenceKeepsTheOneTheLineHas() {
+		service.project(paymentEvent(PaymentEventType.PAYMENT_COMPLETED));
+		service.project(refundEvent(PaymentEventType.REFUND_COMPLETED, "100.00", null));
+
+		assertThat(line().reference()).isEqualTo(REFERENCE);
+	}
+
 	private StatementRepository.StatementLine line() {
 		return statement.lines.get(PAYMENT);
 	}
 
 	private static PaymentEvent paymentEvent(PaymentEventType type) {
 		return new PaymentEvent(UUID.randomUUID(), type, PAYMENT, null, new AccountId("ACC-1"), new AccountId("ACC-2"),
-				new Money(new BigDecimal("250.00"), Currency.EUR), SETTLED_AT);
+				new Money(new BigDecimal("250.00"), Currency.EUR), REFERENCE, SETTLED_AT);
 	}
 
 	private static PaymentEvent refundEvent(PaymentEventType type, String amount) {
+		return refundEvent(type, amount, REFERENCE);
+	}
+
+	private static PaymentEvent refundEvent(PaymentEventType type, String amount, PaymentReference reference) {
 		return new PaymentEvent(UUID.randomUUID(), type, PAYMENT, RefundId.newId(), new AccountId("ACC-1"),
-				new AccountId("ACC-2"), new Money(new BigDecimal(amount), Currency.EUR), SETTLED_AT.plusSeconds(60));
+				new AccountId("ACC-2"), new Money(new BigDecimal(amount), Currency.EUR), reference,
+				SETTLED_AT.plusSeconds(60));
 	}
 
 	private static class InMemoryStatement implements StatementRepository {

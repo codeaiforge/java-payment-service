@@ -3,6 +3,7 @@ package com.example.payment.application.port.secondary;
 import com.example.payment.domain.valueobject.AccountId;
 import com.example.payment.domain.valueobject.Currency;
 import com.example.payment.domain.valueobject.PaymentId;
+import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.PaymentStatus;
 
 import java.math.BigDecimal;
@@ -38,10 +39,11 @@ public interface StatementRepository {
 	/**
 	 * A payment as the statement shows it, from its source account's side.
 	 * amount, status and settledAt are null until the payment's own event has
-	 * been applied: a refund event can arrive first.
+	 * been applied: a refund event can arrive first. reference is null when no
+	 * event applied so far had one (docs/episodes/bonus-10).
 	 */
 	record StatementLine(PaymentId paymentId, AccountId accountId, AccountId counterpartyAccountId, BigDecimal amount,
-			Currency currency, PaymentStatus status, BigDecimal refundedAmount, Instant settledAt, UUID lastEventId) {
+			Currency currency, PaymentReference reference, PaymentStatus status, BigDecimal refundedAmount, Instant settledAt, UUID lastEventId) {
 	}
 
 	record StatementPage(List<StatementLine> lines, long totalLines) {

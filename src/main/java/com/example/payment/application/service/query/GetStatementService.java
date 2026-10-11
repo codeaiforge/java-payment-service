@@ -101,6 +101,7 @@ public class GetStatementService implements GetStatementUseCase {
 
 	private static GetStatementResult.Line toLine(StatementLine line) {
 		return new GetStatementResult.Line(line.paymentId().toString(), line.counterpartyAccountId().value(), line.amount(),
-				line.currency().name(), line.status().name(), line.refundedAmount(), line.settledAt());
+				line.currency().name(), line.reference() == null ? null : line.reference().value(), line.status().name(),
+				line.refundedAmount(), line.settledAt());
 	}
 }

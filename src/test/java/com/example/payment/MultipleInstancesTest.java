@@ -11,7 +11,9 @@ import com.example.payment.domain.valueobject.PaymentId;
 import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.PaymentStatus;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
-import com.jayway.jsonpath.JsonPath;
+import io.apicurio.registry.serde.avro.AvroKafkaDeserializer;
+import io.apicurio.registry.serde.config.SerdeConfig;
+import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -24,6 +26,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionOperations;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
@@ -55,6 +58,7 @@ class MultipleInstancesTest {
 
 	static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18-alpine");
 	static final KafkaContainer kafka = new KafkaContainer("apache/kafka-native:4.1.1");
+	static final GenericContainer<?> schemaRegistry = new TestcontainersConfiguration().schemaRegistry();
 
 	@RegisterExtension
 	static WireMockExtension externalSystems = WireMockExtension.newInstance()
@@ -68,6 +72,7 @@ class MultipleInstancesTest {
 	static void startTwoInstances() {
 		postgres.start();
 		kafka.start();
+		schemaRegistry.start();
 		first = instance();
 		second = instance();
 	}
@@ -87,6 +92,7 @@ class MultipleInstancesTest {
 				"--spring.datasource.username=" + postgres.getUsername(),
 				"--spring.datasource.password=" + postgres.getPassword(),
 				"--spring.kafka.bootstrap-servers=" + kafka.getBootstrapServers(),
+				"--spring.kafka.properties.apicurio.registry.url=" + TestcontainersConfiguration.registryUrl(schemaRegistry),
 				"--account-system.url=" + externalSystems.baseUrl(),
 				"--authorization-system.url=" + externalSystems.baseUrl(),
 				"--limit-system.url=" + externalSystems.baseUrl(),
@@ -173,17 +179,20 @@ class MultipleInstancesTest {
 		Map<String, Object> config = Map.of(
 				ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers(),
 				ConsumerConfig.GROUP_ID_CONFIG, "multiple-instances-test-" + UUID.randomUUID(),
-				ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+				ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
+				SerdeConfig.REGISTRY_URL, TestcontainersConfiguration.registryUrl(schemaRegistry));
 		List<Map<String, String>> received = new ArrayList<>();
-		try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(config, new StringDeserializer(), new StringDeserializer())) {
+		AvroKafkaDeserializer<GenericRecord> avro = new AvroKafkaDeserializer<>();
+		avro.configure(config, false);
+		try (KafkaConsumer<String, GenericRecord> consumer = new KafkaConsumer<>(config, new StringDeserializer(), avro)) {
 			consumer.subscribe(List.of("payment-events"));
 			await().atMost(Duration.ofSeconds(30)).during(Duration.ofSeconds(1)).untilAsserted(() -> {
-				for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(100))) {
+				for (ConsumerRecord<String, GenericRecord> record : consumer.poll(Duration.ofMillis(100))) {
 					if (!paymentIds.contains(record.key())) {
 						continue;
 					}
-					received.add(Map.of("eventId", JsonPath.read(record.value(), "$.eventId"),
-							"paymentId", JsonPath.read(record.value(), "$.paymentId")));
+					received.add(Map.of("eventId", record.value().get("eventId").toString(),
+							"paymentId", record.value().get("paymentId").toString()));
 				}
 				assertThat(received).hasSize(expected);
 			});

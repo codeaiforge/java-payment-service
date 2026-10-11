@@ -30,6 +30,9 @@ class StatementLineEntity {
 	@Column(nullable = false, length = 3)
 	private String currency;
 
+	@Column(length = 140)
+	private String reference;
+
 	@Column(length = 20)
 	private String status;
 
@@ -47,12 +50,13 @@ class StatementLineEntity {
 	}
 
 	StatementLineEntity(UUID paymentId, String accountId, String counterpartyAccountId, BigDecimal amount, String currency,
-			String status, BigDecimal refundedAmount, Instant settledAt, UUID lastEventId) {
+			String reference, String status, BigDecimal refundedAmount, Instant settledAt, UUID lastEventId) {
 		this.paymentId = paymentId;
 		this.accountId = accountId;
 		this.counterpartyAccountId = counterpartyAccountId;
 		this.amount = amount;
 		this.currency = currency;
+		this.reference = reference;
 		this.status = status;
 		this.refundedAmount = refundedAmount;
 		this.settledAt = settledAt;
@@ -77,6 +81,10 @@ class StatementLineEntity {
 
 	String getCurrency() {
 		return currency;
+	}
+
+	String getReference() {
+		return reference;
 	}
 
 	String getStatus() {

@@ -11,6 +11,7 @@ import com.example.payment.domain.valueobject.AccountId;
 import com.example.payment.domain.valueobject.AccountStatus;
 import com.example.payment.domain.valueobject.Currency;
 import com.example.payment.domain.valueobject.PaymentId;
+import com.example.payment.domain.valueobject.PaymentReference;
 import com.example.payment.domain.valueobject.PaymentStatus;
 import org.junit.jupiter.api.Test;
 
@@ -28,8 +29,8 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 class GetStatementServiceTest {
 
 	private static final StatementRepository.StatementLine LINE = new StatementRepository.StatementLine(PaymentId.newId(),
-			new AccountId("ACC-1"), new AccountId("ACC-2"), new BigDecimal("250.00"), Currency.EUR, PaymentStatus.COMPLETED,
-			new BigDecimal("40.00"), Instant.parse("2026-10-10T12:00:00Z"), UUID.randomUUID());
+			new AccountId("ACC-1"), new AccountId("ACC-2"), new BigDecimal("250.00"), Currency.EUR,
+			new PaymentReference("Invoice 12345"), PaymentStatus.COMPLETED, new BigDecimal("40.00"), Instant.parse("2026-10-10T12:00:00Z"), UUID.randomUUID());
 
 	private Object[] asked;
 
@@ -68,7 +69,7 @@ class GetStatementServiceTest {
 		assertThat(asked).containsExactly(new AccountId("ACC-1"), Set.of(PaymentStatus.COMPLETED),
 				Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-10-11T00:00:00Z"), 2, 20);
 		assertThat(result).isEqualTo(new GetStatementResult(List.of(new GetStatementResult.Line(LINE.paymentId().toString(),
-				"ACC-2", new BigDecimal("250.00"), "EUR", "COMPLETED", new BigDecimal("40.00"), LINE.settledAt())), 2, 20, 41));
+				"ACC-2", new BigDecimal("250.00"), "EUR", "Invoice 12345", "COMPLETED", new BigDecimal("40.00"), LINE.settledAt())), 2, 20, 41));
 	}
 
 	@Test

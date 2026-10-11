@@ -47,6 +47,9 @@ class OutboxEntity {
 	@Column(nullable = false, length = 3)
 	private String currency;
 
+	@Column(length = 140)
+	private String reference;
+
 	@Column(name = "occurred_at", nullable = false)
 	private Instant occurredAt;
 
@@ -61,7 +64,8 @@ class OutboxEntity {
 	}
 
 	OutboxEntity(UUID eventId, String eventType, UUID paymentId, UUID refundId, String sourceAccountId,
-			String destinationAccountId, BigDecimal amount, String currency, Instant occurredAt, String traceContext) {
+			String destinationAccountId, BigDecimal amount, String currency, String reference, Instant occurredAt,
+			String traceContext) {
 		this.eventId = eventId;
 		this.eventType = eventType;
 		this.paymentId = paymentId;
@@ -70,6 +74,7 @@ class OutboxEntity {
 		this.destinationAccountId = destinationAccountId;
 		this.amount = amount;
 		this.currency = currency;
+		this.reference = reference;
 		this.occurredAt = occurredAt;
 		this.traceContext = traceContext;
 	}
@@ -108,6 +113,10 @@ class OutboxEntity {
 
 	String getCurrency() {
 		return currency;
+	}
+
+	String getReference() {
+		return reference;
 	}
 
 	Instant getOccurredAt() {

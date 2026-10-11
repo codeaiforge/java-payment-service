@@ -43,6 +43,7 @@ class PaymentEventTest {
 		assertThat(first.sourceAccountId()).isEqualTo(payment.sourceAccountId());
 		assertThat(first.destinationAccountId()).isEqualTo(payment.destinationAccountId());
 		assertThat(first.amount()).isEqualTo(payment.amount());
+		assertThat(first.reference()).isEqualTo(payment.reference());
 		assertThat(first.occurredAt()).isEqualTo(NOW);
 		assertThat(first.eventId()).isNotEqualTo(second.eventId());
 	}
@@ -66,6 +67,7 @@ class PaymentEventTest {
 		assertThat(event.paymentId()).isEqualTo(payment.id());
 		assertThat(event.refundId()).isEqualTo(refund.id());
 		assertThat(event.amount()).isEqualTo(refund.amount());
+		assertThat(event.reference()).isEqualTo(payment.reference());
 		assertThat(PaymentEvent.finalStatusReached(payment, NOW).refundId()).isNull();
 	}
 

@@ -36,10 +36,16 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import io.apicurio.registry.serde.avro.AvroKafkaDeserializer;
+import io.apicurio.registry.serde.avro.AvroSerdeConfig;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.testcontainers.containers.GenericContainer;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -49,11 +55,15 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -149,6 +159,9 @@ class PaymentEndToEndTest {
 
 	@Autowired
 	ConsumerFactory<?, ?> consumerFactory;
+
+	@Autowired
+	GenericContainer<?> schemaRegistry;
 
 	@Value("${payment.security.local-jwt-secret}")
 	String localJwtSecret;
@@ -451,12 +464,35 @@ class PaymentEndToEndTest {
 		execute(paymentId);
 		awaitStatus(paymentId, "COMPLETED");
 
-		String message = paymentEvents(paymentId, 1).getFirst();
-		assertThat((String) JsonPath.read(message, "$.type")).isEqualTo("PAYMENT_COMPLETED");
-		assertThat((String) JsonPath.read(message, "$.paymentId")).isEqualTo(paymentId);
-		assertThat((String) JsonPath.read(message, "$.eventId")).isEqualTo(jdbc.sql(
+		GenericRecord message = paymentEvents(paymentId, 1).getFirst();
+		assertThat(message.get("type")).hasToString("PAYMENT_COMPLETED");
+		assertThat(message.get("paymentId")).hasToString(paymentId);
+		assertThat(message.get("eventId")).hasToString(jdbc.sql(
 				"SELECT event_id::text FROM payment_outbox WHERE payment_id = ?::uuid").param(paymentId).query(String.class).single());
-		assertThat((String) JsonPath.read(message, "$.currency")).isEqualTo("EUR");
+		assertThat(message.get("currency")).hasToString("EUR");
+		// Read with v1, as a consumer that was never updated: the reference it doesn't know about is skipped.
+		assertThat(message.getSchema().getField("reference")).isNull();
+	}
+
+	// The relay registered the schema it writes with (docs/episodes/bonus-10). A version that would break consumers, here
+	// amount renamed, is refused by the registry's FULL_TRANSITIVE rule, as a second line behind PaymentEventSchemaTest.
+	@Test
+	void theRegistryHoldsTheEventSchemaAndRefusesABreakingVersion() throws Exception {
+		paymentEvents(completedPayment("Registered schema"), 1);
+		String versions = TestcontainersConfiguration.registryUrl(schemaRegistry)
+				+ "/groups/default/artifacts/payment-events-value/versions";
+
+		HttpResponse<String> latest = http(HttpRequest.newBuilder(URI.create(versions + "/branch=latest/content")));
+		assertThat(latest.statusCode()).isEqualTo(200);
+		assertThat(new Schema.Parser().parse(latest.body())).isEqualTo(com.example.payment.events.PaymentEvent.getClassSchema());
+
+		String renamed = latest.body().replace("\"amount\"", "\"value\"");
+		HttpResponse<String> refused = http(HttpRequest.newBuilder(URI.create(versions))
+				.header("Content-Type", "application/json")
+				.POST(HttpRequest.BodyPublishers.ofString(JsonMapper.shared().writeValueAsString(
+						Map.of("content", Map.of("content", renamed, "contentType", "application/json"))))));
+		assertThat(refused.body()).contains("RuleViolationException");
+		assertThat(refused.statusCode()).isEqualTo(400);
 	}
 
 	// A full refund in parts: 100, then the 150 left. One cent more is refused, and nothing was sent for it.
@@ -517,13 +553,13 @@ class PaymentEndToEndTest {
 		String refundId = JsonPath.read(refund(paymentId, "40.00", customer()).andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString(), "$.refundId");
 
-		List<String> messages = paymentEvents(paymentId, 2);
+		List<GenericRecord> messages = paymentEvents(paymentId, 2);
 
-		assertThat(messages).extracting(m -> (String) JsonPath.read(m, "$.type"))
+		assertThat(messages).extracting(m -> m.get("type").toString())
 				.containsExactly("PAYMENT_COMPLETED", "REFUND_COMPLETED");
-		String refunded = messages.get(1);
-		assertThat((String) JsonPath.read(refunded, "$.refundId")).isEqualTo(refundId);
-		assertThat((Double) JsonPath.read(refunded, "$.amount")).isEqualTo(40.00);
+		GenericRecord refunded = messages.get(1);
+		assertThat(refunded.get("refundId")).hasToString(refundId);
+		assertThat((BigDecimal) refunded.get("amount")).isEqualByComparingTo("40.00");
 	}
 
 	// The 17.17 refund settled after we stopped listening (wiremock/mappings/refund-orders.json). A reconciliation run
@@ -543,7 +579,7 @@ class PaymentEndToEndTest {
 		externalSystems.verify(getRequestedFor(urlEqualTo("/refund-orders/" + refundId)));
 		assertThat(jdbc.sql("SELECT count(*) FROM refund_audit WHERE refund_id = ?::uuid AND from_status = 'PROCESSING' AND to_status = 'COMPLETED'")
 				.param(refundId).query(Integer.class).single()).isEqualTo(1);
-		assertThat(paymentEvents(paymentId, 2)).extracting(m -> (String) JsonPath.read(m, "$.type"))
+		assertThat(paymentEvents(paymentId, 2)).extracting(m -> m.get("type").toString())
 				.containsExactly("PAYMENT_COMPLETED", "REFUND_COMPLETED");
 		// Asked, never sent again.
 		externalSystems.verify(1, postRequestedFor(urlEqualTo("/refund-orders"))
@@ -561,6 +597,7 @@ class PaymentEndToEndTest {
 				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].refundedAmount".formatted(paymentId)).value(40.00))
 				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].amount".formatted(paymentId)).value(250.00))
 				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].counterpartyAccountId".formatted(paymentId)).value("ACC-20001"))
+				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].reference".formatted(paymentId)).value("On the statement"))
 				.andExpect(jsonPath("$.lines[?(@.paymentId == '%s')].status".formatted(paymentId)).value("COMPLETED")));
 	}
 
@@ -570,8 +607,8 @@ class PaymentEndToEndTest {
 	void theStatementShowsPublishedEventsAndARedeliveredOneCountsOnce() throws Exception {
 		String paymentId = UUID.randomUUID().toString();
 		publishEvent(paymentId, "PAYMENT_COMPLETED", null, "100.00", "2020-03-01T10:00:00Z");
-		Map<String, Object> refund = event(paymentId, "REFUND_COMPLETED", UUID.randomUUID().toString(), "30.00",
-				"2020-03-02T10:00:00Z");
+		com.example.payment.events.PaymentEvent refund = event(paymentId, "REFUND_COMPLETED", UUID.randomUUID().toString(),
+				"30.00", "2020-03-02T10:00:00Z");
 		events.send("payment-events", paymentId, refund).join();
 		events.send("payment-events", paymentId, refund).join();
 		// Published after the duplicate, on the same partition: once it is applied, the duplicate has been read too.
@@ -627,18 +664,18 @@ class PaymentEndToEndTest {
 
 	/** @return the event's ID */
 	private String publishEvent(String paymentId, String type, String refundId, String amount, String occurredAt) {
-		Map<String, Object> event = event(paymentId, type, refundId, amount, occurredAt);
+		com.example.payment.events.PaymentEvent event = event(paymentId, type, refundId, amount, occurredAt);
 		events.send("payment-events", paymentId, event).join();
-		return (String) event.get("eventId");
+		return event.getEventId();
 	}
 
-	private static Map<String, Object> event(String paymentId, String type, String refundId, String amount,
-			String occurredAt) {
-		Map<String, Object> event = new HashMap<>(Map.of("eventId", UUID.randomUUID().toString(), "type", type,
-				"paymentId", paymentId, "sourceAccountId", "ACC-70001", "destinationAccountId", "ACC-20001",
-				"amount", new BigDecimal(amount), "currency", "EUR", "occurredAt", occurredAt));
-		event.put("refundId", refundId);
-		return event;
+	// Without a reference, as every event before docs/episodes/bonus-10.
+	private static com.example.payment.events.PaymentEvent event(String paymentId, String type, String refundId,
+			String amount, String occurredAt) {
+		return com.example.payment.events.PaymentEvent.newBuilder().setEventId(UUID.randomUUID().toString())
+				.setType(com.example.payment.events.PaymentEventType.valueOf(type)).setPaymentId(paymentId)
+				.setRefundId(refundId).setSourceAccountId("ACC-70001").setDestinationAccountId("ACC-20001")
+				.setAmount(new BigDecimal(amount)).setCurrency("EUR").setOccurredAt(Instant.parse(occurredAt)).build();
 	}
 
 	// Kafka delivers at least once, so the same message twice is normal. The second finds the payment past
@@ -946,7 +983,11 @@ class PaymentEndToEndTest {
 	// and a failed call records no URL. Checked over every span the tests so far produced, plus a rejected payment.
 	@Test
 	void noSpanCarriesAnAccountOrCustomerId() throws Exception {
-		completedPayment("Not in any span");
+		String paymentId = completedPayment("Not in any span");
+		// The event carries the reference (docs/episodes/bonus-10): wait until it has been sent and read by the statement.
+		String traceId = executeRequestSpan(paymentId).getTraceId();
+		await().untilAsserted(() -> assertThat(spansOf(traceId)).extracting(SpanData::getName)
+				.contains("payment-events send", "payment-events process"));
 		mockMvc.perform(post("/payments").header("Idempotency-Key", UUID.randomUUID().toString())
 						.contentType(MediaType.APPLICATION_JSON).content("""
 						{ "sourceAccountId": "ACC-99999", "destinationAccountId": "ACC-20001", "amount": 250.00,
@@ -1005,6 +1046,9 @@ class PaymentEndToEndTest {
 	@Test
 	void noExportedLogRecordCarriesAnAccountIdCustomerIdOrReference() throws Exception {
 		completedPayment("Not in any log");
+		// The event carries the reference (docs/episodes/bonus-10): wait until the relay sent it and the statement has it.
+		await().until(() -> jdbc.sql("SELECT count(*) FROM statement_line WHERE reference = 'Not in any log'")
+				.query(Integer.class).single() == 1);
 		mockMvc.perform(post("/payments").header("Idempotency-Key", UUID.randomUUID().toString())
 						.contentType(MediaType.APPLICATION_JSON).content("""
 						{ "sourceAccountId": "ACC-99999", "destinationAccountId": "ACC-20001", "amount": 250.00,
@@ -1051,17 +1095,19 @@ class PaymentEndToEndTest {
 	}
 
 	// Everything on payment-events about this payment, as another service would read it, once exactly this many have arrived.
-	private List<String> paymentEvents(String paymentId, int expected) {
-		Properties asText = new Properties();
-		asText.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-		asText.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-		List<String> received = new ArrayList<>();
-		try (Consumer<?, ?> consumer = consumerFactory.createConsumer("events-test-" + UUID.randomUUID(), null, null, asText)) {
+	// That service was built on schema v1 and never updated: each event is read with v1 (ReleasedSchemaV1).
+	private List<GenericRecord> paymentEvents(String paymentId, int expected) {
+		Properties asV1 = new Properties();
+		asV1.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, AvroKafkaDeserializer.class);
+		asV1.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+		asV1.put(AvroSerdeConfig.AVRO_DATUM_PROVIDER, ReleasedSchemaV1.class.getName());
+		List<GenericRecord> received = new ArrayList<>();
+		try (Consumer<?, ?> consumer = consumerFactory.createConsumer("events-test-" + UUID.randomUUID(), null, null, asV1)) {
 			consumer.subscribe(List.of("payment-events"));
 			await().during(Duration.ofMillis(500)).untilAsserted(() -> {
 				for (ConsumerRecord<?, ?> record : consumer.poll(Duration.ofMillis(100))) {
 					if (paymentId.equals(record.key())) {
-						received.add((String) record.value());
+						received.add((GenericRecord) record.value());
 					}
 				}
 				assertThat(received).hasSize(expected);
@@ -1126,5 +1172,11 @@ class PaymentEndToEndTest {
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return JsonPath.read(response, "$.paymentId");
+	}
+
+	private static HttpResponse<String> http(HttpRequest.Builder request) throws Exception {
+		try (HttpClient client = HttpClient.newHttpClient()) {
+			return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+		}
 	}
 }

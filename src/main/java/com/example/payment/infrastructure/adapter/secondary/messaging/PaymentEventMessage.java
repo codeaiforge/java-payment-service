@@ -2,24 +2,35 @@ package com.example.payment.infrastructure.adapter.secondary.messaging;
 
 import com.example.payment.domain.event.PaymentEvent;
 
-import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
- * A PaymentEvent on the wire, as JSON on the payment-events topic. This is the
- * contract with the consumers; the domain event can change without breaking it.
- * refundId is null for a payment's own events; adding it broke no consumer that ignores unknown fields.
+ * A PaymentEvent on the wire: the Avro record generated from
+ * src/main/avro/PaymentEvent.avsc (docs/episodes/bonus-10). The schema is the
+ * contract with the consumers, checked in the registry and by the build; the
+ * domain event can change without breaking it.
  */
-record PaymentEventMessage(String eventId, String type, String paymentId, String refundId, String sourceAccountId,
-		String destinationAccountId, BigDecimal amount, String currency, String occurredAt) {
+final class PaymentEventMessage {
 
 	/** Keyed by payment id: every event of one payment lands on the same partition, in order. */
 	static final String TOPIC = "payment-events";
 
-	static PaymentEventMessage from(PaymentEvent event) {
-		return new PaymentEventMessage(event.eventId().toString(), event.type().name(),
-				event.paymentId().value().toString(), event.refundId() == null ? null : event.refundId().toString(),
-				event.sourceAccountId().value(),
-				event.destinationAccountId().value(), event.amount().amount(), event.amount().currency().name(),
-				event.occurredAt().toString());
+	private PaymentEventMessage() {
+	}
+
+	static com.example.payment.events.PaymentEvent from(PaymentEvent event) {
+		return com.example.payment.events.PaymentEvent.newBuilder()
+				.setEventId(event.eventId().toString())
+				.setType(com.example.payment.events.PaymentEventType.valueOf(event.type().name()))
+				.setPaymentId(event.paymentId().value().toString())
+				.setRefundId(event.refundId() == null ? null : event.refundId().toString())
+				.setSourceAccountId(event.sourceAccountId().value())
+				.setDestinationAccountId(event.destinationAccountId().value())
+				// The schema's scale is 2, and Avro writes a decimal only at exactly its scale. Money has at most 2 places.
+				.setAmount(event.amount().amount().setScale(2, RoundingMode.UNNECESSARY))
+				.setCurrency(event.amount().currency().name())
+				.setOccurredAt(event.occurredAt())
+				.setReference(event.reference() == null ? null : event.reference().value())
+				.build();
 	}
 }

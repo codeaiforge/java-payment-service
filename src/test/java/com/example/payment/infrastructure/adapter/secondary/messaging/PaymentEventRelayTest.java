@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
 class PaymentEventRelayTest {
 
 	@SuppressWarnings("unchecked")
-	private final KafkaTemplate<String, PaymentEventMessage> kafka = mock(KafkaTemplate.class);
+	private final KafkaTemplate<String, com.example.payment.events.PaymentEvent> kafka = mock(KafkaTemplate.class);
 	private final OutboxPersistenceAdapter outbox = mock(OutboxPersistenceAdapter.class);
 	private final PaymentEventRelay relay = new PaymentEventRelay(outbox, kafka, 100, Duration.ofDays(7),
 			new SimpleMeterRegistry(), Tracer.NOOP, TransactionOperations.withoutTransaction());
@@ -91,7 +91,7 @@ class PaymentEventRelayTest {
 		verify(outbox, times(3)).deletePublishedBefore(any(), eq(1000));
 	}
 
-	private static CompletableFuture<SendResult<String, PaymentEventMessage>> acked() {
+	private static CompletableFuture<SendResult<String, com.example.payment.events.PaymentEvent>> acked() {
 		return CompletableFuture.completedFuture(null);
 	}
 

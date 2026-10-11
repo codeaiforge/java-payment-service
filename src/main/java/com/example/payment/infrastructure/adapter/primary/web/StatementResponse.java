@@ -8,14 +8,14 @@ import java.util.List;
 
 public record StatementResponse(List<Line> lines, int page, int size, long totalLines) {
 
-	public record Line(String paymentId, String counterpartyAccountId, BigDecimal amount, String currency, String status,
-			BigDecimal refundedAmount, Instant settledAt) {
+	public record Line(String paymentId, String counterpartyAccountId, BigDecimal amount, String currency,
+			String reference, String status, BigDecimal refundedAmount, Instant settledAt) {
 	}
 
 	static StatementResponse from(GetStatementResult result) {
 		return new StatementResponse(result.lines().stream()
 				.map(line -> new Line(line.paymentId(), line.counterpartyAccountId(), line.amount(), line.currency(),
-						line.status(), line.refundedAmount(), line.settledAt()))
+						line.reference(), line.status(), line.refundedAmount(), line.settledAt()))
 				.toList(), result.page(), result.size(), result.totalLines());
 	}
 }

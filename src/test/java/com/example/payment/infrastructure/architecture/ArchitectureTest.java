@@ -54,6 +54,15 @@ class ArchitectureTest {
 			.that().resideInAnyPackage(DOMAIN, "com.example.payment.application..")
 			.should().dependOnClassesThat().resideInAnyPackage("io.micrometer.tracing..", "io.opentelemetry..");
 
+	// The classes generated from src/main/avro are the wire format, like a JPA entity is the table: the messaging
+	// adapters map them to and from the domain's PaymentEvent, and nothing else sees them (docs/episodes/bonus-10).
+	@ArchTest
+	static final ArchRule eventSchemaClassesStayInTheMessagingAdapters = noClasses()
+			.that().resideOutsideOfPackages("com.example.payment.events..",
+					"com.example.payment.infrastructure.adapter.primary.messaging..",
+					"com.example.payment.infrastructure.adapter.secondary.messaging..")
+			.should().dependOnClassesThat().resideInAPackage("com.example.payment.events..");
+
 	@ArchTest
 	static final ArchRule domainDoesNotUsePersistenceEntities = noClasses()
 			.that().resideInAPackage(DOMAIN)

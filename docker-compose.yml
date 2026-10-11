@@ -19,6 +19,7 @@ services:
       SPRING_DATASOURCE_USERNAME: payments
       SPRING_DATASOURCE_PASSWORD: payments
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      SPRING_KAFKA_PROPERTIES_APICURIO_REGISTRY_URL: http://schema-registry:8080/apis/registry/v3
       ACCOUNT_SYSTEM_URL: http://account-system:8080
       AUTHORIZATION_SYSTEM_URL: http://account-system:8080
       LIMIT_SYSTEM_URL: http://account-system:8080
@@ -29,6 +30,8 @@ services:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_started
+      schema-registry:
         condition: service_started
       account-system:
         condition: service_started
@@ -86,6 +89,18 @@ services:
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  # The schemas of payment-events (docs/episodes/bonus-10). Every version of PaymentEvent the relay registers must be
+  # FULL_TRANSITIVE compatible with all earlier ones, or it is refused. In-memory storage: a restart forgets the schemas
+  # and the relay registers the current one again, but the Avro messages already on payment-events name schema IDs the
+  # new registry doesn't have. After a restart, start Kafka over too (docker compose down). Local use only.
+  # http://localhost:8085/apis/registry/v3/groups/default/artifacts/payment-events-value/versions lists the versions.
+  schema-registry:
+    image: apicurio/apicurio-registry:3.3.3
+    ports:
+      - "8085:8080"
+    environment:
+      APICURIO_RULES_GLOBAL_COMPATIBILITY: FULL_TRANSITIVE
 
   # Scrapes the running service's /actuator/prometheus every 5s (observability/prometheus.yml), in its
   # container or on the host, and evaluates the alert rules in observability/prometheus/rules (docs/episodes/bonus-08).
