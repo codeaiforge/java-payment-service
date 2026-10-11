@@ -594,3 +594,33 @@ GET http://localhost:8085/apis/registry/v3/groups/default/artifacts/payment-even
 
 ### Bonus 10 — the latest one: the schema in src/main/avro/PaymentEvent.avsc
 GET http://localhost:8085/apis/registry/v3/groups/default/artifacts/payment-events-value/versions/branch=latest/content
+
+### Bonus 11 — register an endpoint -> 201, with "secret" (whsec_…): shown this once, store it. Locally, use a public HTTPS
+### request inspector such as https://webhook.site: the service calls no address inside a private network, localhost included.
+POST {{baseUrl}}/webhooks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "url": "https://webhook.site/00000000-0000-0000-0000-000000000000" }
+
+### Bonus 11 — the caller's endpoints -> 200, no secrets. Execute a payment from ACC-10001 and the endpoint receives it signed.
+GET {{baseUrl}}/webhooks
+Authorization: Bearer {{token}}
+
+### Bonus 11 — an endpoint inside our network (the cloud metadata service) -> 400
+POST {{baseUrl}}/webhooks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "url": "https://169.254.169.254/latest/meta-data/" }
+
+### Bonus 11 — plain http -> 400
+POST {{baseUrl}}/webhooks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "url": "http://webhook.site/00000000-0000-0000-0000-000000000000" }
+
+### Bonus 11 — delete one (its webhookId from the list) -> 204; another customer's -> 404
+DELETE {{baseUrl}}/webhooks/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

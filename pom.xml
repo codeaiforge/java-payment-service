@@ -139,6 +139,11 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
+		<!-- Webhooks (docs/episodes/bonus-11): the HTTP client lets us plug in the DNS resolver, unlike the JDK's. -->
+		<dependency>
+			<groupId>org.apache.httpcomponents.client5</groupId>
+			<artifactId>httpclient5</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>

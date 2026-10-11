@@ -34,6 +34,7 @@ architecture driven by requirements rather than by a template.
 - Safe on several instances: `FOR UPDATE SKIP LOCKED` and coordinated schedulers (B7)
 - A read model built from the service's own events, and rebuilt by replaying them (B9)
 - Event contracts that evolve without breaking consumers: Avro, a schema registry, compatibility checked in the build (B10)
+- Calling customers' URLs safely: signed webhooks, durable retries, and no way into our own network (B11)
 
 ## The final system
 
@@ -65,15 +66,15 @@ stateDiagram-v2
 ```mermaid
 flowchart LR
     subgraph primary["Primary adapters"]
-        web["PaymentController · StatementController<br/>(REST)"]
-        consumer["PaymentProcessingConsumer<br/>StatementProjectionConsumer<br/>(Kafka)"]
-        scheduler["ReconciliationScheduler"]
+        web["PaymentController · StatementController<br/>WebhookController (REST)"]
+        consumer["PaymentProcessingConsumer<br/>StatementProjectionConsumer<br/>WebhookDeliveryConsumer (Kafka)"]
+        scheduler["ReconciliationScheduler<br/>WebhookDispatchScheduler"]
     end
 
     subgraph app["Application"]
-        uc["Primary ports<br/>CreatePaymentUseCase · GetPaymentUseCase<br/>CancelPaymentUseCase · RequestPaymentExecutionUseCase<br/>ExecutePaymentUseCase · RefundPaymentUseCase · GetRefundsUseCase<br/>ReconcilePaymentsUseCase · ReconcileRefundsUseCase<br/>GetStatementUseCase · ProjectPaymentEventUseCase"]
+        uc["Primary ports<br/>CreatePaymentUseCase · GetPaymentUseCase<br/>CancelPaymentUseCase · RequestPaymentExecutionUseCase<br/>ExecutePaymentUseCase · RefundPaymentUseCase · GetRefundsUseCase<br/>ReconcilePaymentsUseCase · ReconcileRefundsUseCase<br/>GetStatementUseCase · ProjectPaymentEventUseCase<br/>RegisterWebhookUseCase · GetWebhooksUseCase · DeleteWebhookUseCase<br/>DeliverWebhookUseCase · DispatchWebhooksUseCase"]
         services["Application services"]
-        domain["Domain<br/>Payment · Refund · value objects"]
+        domain["Domain<br/>Payment · Refund · WebhookSubscription · value objects"]
         sp["Secondary ports"]
         uc --> services --> domain
         services --> sp
@@ -86,6 +87,8 @@ flowchart LR
         publisher["Kafka publisher<br/>PaymentProcessingPort"]
         feign["Feign → external systems<br/>AccountEnquiryPort · PaymentAuthorizationPort<br/>PaymentLimitPort · PaymentExecutionPort"]
         metrics["Micrometer<br/>PaymentMetricsPort"]
+        webhooks["SQL → PostgreSQL<br/>WebhookRepository"]
+        sender["HTTPS → customers' endpoints<br/>WebhookSender"]
     end
 
     web --> uc
@@ -97,12 +100,14 @@ flowchart LR
     sp --> publisher
     sp --> feign
     sp --> metrics
+    sp --> webhooks
+    sp --> sender
 ```
 
 Dependencies point inwards. The domain imports no Spring, JPA or Feign, and ArchUnit
 fails the build if it does (14, 20).
 
-**Tech stack:** Java 25, Spring Boot 4.1, PostgreSQL, Flyway, Kafka, Avro, Apicurio Registry, OpenFeign,
+**Tech stack:** Java 25, Spring Boot 4.1, PostgreSQL, Flyway, Kafka, Avro, Apicurio Registry, OpenFeign, Apache HttpClient,
 Resilience4j, Spring Security (OAuth2 resource server), ShedLock, springdoc-openapi,
 Micrometer, OpenTelemetry, Prometheus, Alertmanager, Grafana, Tempo, Loki, Testcontainers, WireMock,
 ArchUnit.
@@ -230,6 +235,7 @@ Each part builds on the one before, in order.
 | B8 | [Alerting and SLOs](docs/episodes/bonus-08-alerting-slos.md) | SLOs with burn-rate alerts, one page per incident, from alert to trace | `bonus-08-alerting-slos` |
 | B9 | [Payment Statement](docs/episodes/bonus-09-payment-statement.md) | A read model (CQRS) fed by payment events, eventually consistent, rebuilt by replay | `bonus-09-payment-statement` |
 | B10 | [Versioned Event Schemas](docs/episodes/bonus-10-event-schemas.md) | Avro with a schema registry; a change that breaks a consumer fails the build | `bonus-10-event-schemas` |
+| B11 | [Webhooks](docs/episodes/bonus-11-webhooks.md) | Signed webhooks with durable retries; customer URLs kept out of our network (SSRF) | `bonus-11-webhooks` |
 
 ## Shortcuts in the code
 
@@ -265,6 +271,8 @@ marker `ponytail:` for the same thing.)
     to let it shrink ([B9](docs/episodes/bonus-09-payment-statement.md)).
   - JSON events already on `payment-events` can't be read as Avro; there is no cutover
     for them ([B10](docs/episodes/bonus-10-event-schemas.md)).
+  - Webhook secrets are stored unencrypted and can't be rotated
+    ([B11](docs/episodes/bonus-11-webhooks.md)).
 
 ## About
 

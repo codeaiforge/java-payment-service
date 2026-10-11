@@ -1,6 +1,8 @@
 package com.example.payment;
 
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.example.payment.infrastructure.adapter.primary.messaging.PaymentProcessingMessage;
 import com.jayway.jsonpath.JsonPath;
 import io.opentelemetry.api.OpenTelemetry;
@@ -12,6 +14,7 @@ import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SpanProcessor;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,6 +57,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -64,6 +69,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +82,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.absent;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -88,7 +96,9 @@ import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -112,6 +122,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Log records take the production path, the batch processor and its OTLP
  * exporter, to a Loki that isn't there: every test here runs with Loki down.
  * The same batches also reach an in-memory exporter the tests read.
+ *
+ * The same WireMock also plays customers' webhook endpoints, over HTTPS with a
+ * test certificate (src/test/resources/webhooks), on 127.0.0.1: the one private
+ * address these tests let webhooks call.
  */
 @SpringBootTest
 @ActiveProfiles("local")
@@ -124,15 +138,18 @@ class PaymentEndToEndTest {
 	// The same fictional account, authorization, limit and payment systems docker-compose.yml serves locally.
 	@RegisterExtension
 	static WireMockExtension externalSystems = WireMockExtension.newInstance()
-			.options(wireMockConfig().dynamicPort().usingFilesUnderDirectory("wiremock"))
+			.options(wireMockConfig().dynamicPort().usingFilesUnderDirectory("wiremock").dynamicHttpsPort()
+					.keystorePath("src/test/resources/webhooks/merchant.p12").keystoreType("PKCS12")
+					.keystorePassword("merchant-test").keyManagerPassword("merchant-test"))
 			.build();
 
 	@DynamicPropertySource
 	static void externalSystemUrls(DynamicPropertyRegistry registry) {
-		registry.add("account-system.url", externalSystems::baseUrl);
-		registry.add("authorization-system.url", externalSystems::baseUrl);
-		registry.add("limit-system.url", externalSystems::baseUrl);
-		registry.add("payment-system.url", externalSystems::baseUrl);
+		// HTTP: with an HTTPS port too, baseUrl() would be the HTTPS one, the merchant's.
+		registry.add("account-system.url", () -> externalSystems.getRuntimeInfo().getHttpBaseUrl());
+		registry.add("authorization-system.url", () -> externalSystems.getRuntimeInfo().getHttpBaseUrl());
+		registry.add("limit-system.url", () -> externalSystems.getRuntimeInfo().getHttpBaseUrl());
+		registry.add("payment-system.url", () -> externalSystems.getRuntimeInfo().getHttpBaseUrl());
 		// The TIMEOUT mapping answers after 7s; no need to wait the real 5s to give up.
 		registry.add("spring.cloud.openfeign.client.config.payment-system.read-timeout", () -> "300");
 		// Reconciliation runs often here; with the 2m threshold it only finds payments a test has backdated.
@@ -143,6 +160,10 @@ class PaymentEndToEndTest {
 		registry.add("management.tracing.export.otlp.enabled", () -> "false");
 		// Nothing listens on port 9: each export fails, as when Loki is down.
 		registry.add("management.opentelemetry.logging.export.otlp.endpoint", () -> "http://localhost:9/otlp/v1/logs");
+		registry.add("payment.webhooks.dispatch-interval", () -> "100ms");
+		registry.add("payment.webhooks.allowed-private-addresses", () -> "127.0.0.1");
+		registry.add("payment.webhooks.ssl-bundle", () -> "merchant");
+		registry.add("spring.ssl.bundle.pem.merchant.truststore.certificate", () -> "classpath:webhooks/merchant.crt");
 	}
 
 	@Autowired
@@ -182,6 +203,13 @@ class PaymentEndToEndTest {
 	@BeforeEach
 	void sendLogsToThisContext() {
 		OpenTelemetryAppender.install(openTelemetry);
+	}
+
+	// An endpoint hears of every payment of its customer that settles while it is registered: each test's are gone after
+	// it, so they don't collect later tests' payments, or retry against stubs WireMock has since forgotten.
+	@AfterEach
+	void deleteWebhooks() {
+		jdbc.sql("DELETE FROM webhook_subscription").update();
 	}
 
 	// Finished spans are kept in memory, as each one ends, instead of being sent to Tempo.
@@ -681,6 +709,105 @@ class PaymentEndToEndTest {
 	// Kafka delivers at least once, so the same message twice is normal. The second finds the payment past
 	// AUTHORIZED and is dropped: the payment system is asked once.
 	@Test
+	void registersAWebhookAndShowsItsSecretOnlyOnce() throws Exception {
+		String response = registerWebhook(merchantUrl("/merchant/once"), customer())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.url").value(merchantUrl("/merchant/once")))
+				.andExpect(jsonPath("$.status").value("ACTIVE"))
+				.andExpect(jsonPath("$.secret").value(startsWith("whsec_")))
+				.andReturn().getResponse().getContentAsString();
+
+		mockMvc.perform(get("/webhooks").with(customer()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].webhookId").value((String) JsonPath.read(response, "$.webhookId")))
+				.andExpect(jsonPath("$[0].secret").doesNotExist());
+	}
+
+	// SSRF (docs/episodes/bonus-11): addresses inside our network are refused, whatever the customer's reason.
+	@Test
+	void aWebhookThatIsNotHttpsOrPointsIntoOurNetworkIs400() throws Exception {
+		registerWebhook("http://merchant.example.com/hooks", customer())
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.detail").value("Webhook URL must be https"));
+		for (String url : List.of("https://10.0.0.1/hooks", "https://169.254.169.254/latest/meta-data/", "https://127.0.0.2/")) {
+			registerWebhook(url, customer())
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.detail").value("Webhook URL's host must resolve, and only to public addresses"));
+		}
+		registerWebhook("not a url", customer()).andExpect(status().isBadRequest());
+
+		assertThat(jdbc.sql("SELECT count(*) FROM webhook_subscription").query(Integer.class).single()).isZero();
+	}
+
+	@Test
+	void aSettledPaymentIsPostedSignedToThePayersEndpoint() throws Exception {
+		externalSystems.stubFor(WireMock.post("/merchant/signed").willReturn(aResponse().withStatus(200)));
+		String secret = JsonPath.read(registerWebhook(merchantUrl("/merchant/signed"), customer())
+				.andReturn().getResponse().getContentAsString(), "$.secret");
+
+		String paymentId = completedPayment("Told by webhook");
+
+		LoggedRequest request = await().until(() -> webhooksReceived("/merchant/signed", paymentId), r -> !r.isEmpty()).getFirst();
+		assertThat(request.getHeader("Webhook-Signature")).isEqualTo(signature(secret, request));
+		assertThat(request.getHeader("Webhook-Id")).isEqualTo(jdbc.sql(
+				"SELECT event_id::text FROM payment_outbox WHERE payment_id = ?::uuid").param(paymentId).query(String.class).single());
+		assertThat((String) JsonPath.read(request.getBodyAsString(), "$.type")).isEqualTo("payment.completed");
+		assertThat((String) JsonPath.read(request.getBodyAsString(), "$.data.amount")).isEqualTo("250.00");
+		assertThat((String) JsonPath.read(request.getBodyAsString(), "$.data.reference")).isEqualTo("Told by webhook");
+		externalSystems.verify(postRequestedFor(urlEqualTo("/merchant/signed")).withHeader("traceparent", absent()));
+	}
+
+	// CUST-2002's endpoint isn't CUST-1001's to see or delete, and hears nothing of CUST-1001's payments.
+	@Test
+	void aCustomerSeesAndDeletesOnlyTheirOwnWebhooksAndHearsOnlyOfTheirOwnPayments() throws Exception {
+		externalSystems.stubFor(WireMock.post(WireMock.urlPathMatching("/merchant/.*")).willReturn(aResponse().withStatus(200)));
+		registerWebhook(merchantUrl("/merchant/mine"), customer()).andExpect(status().isCreated());
+		String theirs = JsonPath.read(registerWebhook(merchantUrl("/merchant/theirs"), otherCustomer())
+				.andReturn().getResponse().getContentAsString(), "$.webhookId");
+
+		mockMvc.perform(get("/webhooks").with(customer()))
+				.andExpect(jsonPath("$[?(@.webhookId == '%s')]".formatted(theirs)).isEmpty());
+		mockMvc.perform(delete("/webhooks/{id}", theirs).with(customer())).andExpect(status().isNotFound());
+		String paymentId = completedPayment("Only mine");
+
+		await().until(() -> webhooksReceived("/merchant/mine", paymentId), r -> !r.isEmpty());
+		// Every endpoint the event is for was queued at once, before any was sent: none was queued for theirs.
+		assertThat(jdbc.sql("SELECT count(*) FROM webhook_delivery WHERE subscription_id = ?::uuid").param(theirs)
+				.query(Integer.class).single()).isZero();
+		assertThat(webhooksReceived("/merchant/theirs", paymentId)).isEmpty();
+		mockMvc.perform(get("/webhooks").with(otherCustomer()))
+				.andExpect(jsonPath("$[0].webhookId").value(theirs));
+		mockMvc.perform(delete("/webhooks/{id}", theirs).with(otherCustomer())).andExpect(status().isNoContent());
+	}
+
+	// The URL's path can hold the customer's own token, and the secret signs as us: neither leaves the database, and nor
+	// does the customer ID, on success or failure.
+	@Test
+	@ExtendWith(OutputCaptureExtension.class)
+	void noWebhookSecretUrlPathOrCustomerIdInLogsSpansOrExportedLogRecords(CapturedOutput output) throws Exception {
+		externalSystems.stubFor(WireMock.post("/merchant/path-token-7f3a").willReturn(aResponse().withStatus(200)));
+		externalSystems.stubFor(WireMock.post("/merchant/path-token-9c1e").willReturn(aResponse().withStatus(500)));
+		String secret = JsonPath.read(registerWebhook(merchantUrl("/merchant/path-token-7f3a"), customer())
+				.andReturn().getResponse().getContentAsString(), "$.secret");
+		String failingSecret = JsonPath.read(registerWebhook(merchantUrl("/merchant/path-token-9c1e"), customer())
+				.andReturn().getResponse().getContentAsString(), "$.secret");
+
+		String paymentId = completedPayment("Webhook not in any log");
+
+		await().until(() -> jdbc.sql("SELECT string_agg(status || attempts, ',' ORDER BY status) FROM webhook_delivery WHERE payment_id = ?::uuid")
+				.param(paymentId).query(String.class).single(), "DELIVERED1,PENDING1"::equals);
+		await().until(() -> logRecords.getFinishedLogRecordItems().stream()
+				.anyMatch(record -> String.valueOf(record.getBodyValue()).contains("attempt 1 failed (status 500)")));
+		List<String> forbidden = List.of(secret, failingSecret, "path-token", "CUST-1001");
+		assertThat(output.getOut()).doesNotContain(forbidden);
+		assertThat(spans.getFinishedSpanItems()).allSatisfy(span ->
+				assertThat(span.getName() + span.getAttributes() + span.getEvents()).doesNotContain(forbidden));
+		assertThat(logRecords.getFinishedLogRecordItems()).allSatisfy(record ->
+				assertThat(record.getBodyValue() + " " + record.getAttributes()).doesNotContain(forbidden));
+	}
+
+	@Test
 	void aDuplicateMessageDoesNotSendThePaymentTwice() throws Exception {
 		String paymentId = createPayment("Duplicate message");
 
@@ -1172,6 +1299,29 @@ class PaymentEndToEndTest {
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return JsonPath.read(response, "$.paymentId");
+	}
+
+	private String merchantUrl(String path) {
+		return "https://127.0.0.1:" + externalSystems.getHttpsPort() + path;
+	}
+
+	private ResultActions registerWebhook(String url, RequestPostProcessor caller) throws Exception {
+		return mockMvc.perform(post("/webhooks").contentType(MediaType.APPLICATION_JSON)
+				.content(JsonMapper.shared().writeValueAsString(Map.of("url", url))).with(caller));
+	}
+
+	private List<LoggedRequest> webhooksReceived(String path, String paymentId) {
+		return externalSystems.findAll(postRequestedFor(urlEqualTo(path))
+				.withRequestBody(matchingJsonPath("$.data.paymentId", equalTo(paymentId))));
+	}
+
+	// What a receiver computes from what arrived, with their copy of the secret.
+	private static String signature(String secret, LoggedRequest request) throws Exception {
+		Mac mac = Mac.getInstance("HmacSHA256");
+		mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+		mac.update((request.getHeader("Webhook-Id") + "." + request.getHeader("Webhook-Timestamp") + ".")
+				.getBytes(StandardCharsets.UTF_8));
+		return "v1=" + HexFormat.of().formatHex(mac.doFinal(request.getBody()));
 	}
 
 	private static HttpResponse<String> http(HttpRequest.Builder request) throws Exception {

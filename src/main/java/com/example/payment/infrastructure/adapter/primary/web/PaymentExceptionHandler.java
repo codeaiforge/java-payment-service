@@ -12,6 +12,8 @@ import com.example.payment.application.exception.PaymentLimitExceededException;
 import com.example.payment.application.exception.PaymentNotFoundException;
 import com.example.payment.application.exception.PaymentValidationException;
 import com.example.payment.application.exception.RefundExceedsPaymentException;
+import com.example.payment.application.exception.WebhookNotFoundException;
+import com.example.payment.application.exception.WebhookValidationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -25,7 +27,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class PaymentExceptionHandler {
 
 	// An unknown account is wrong input to a payment, not a missing /payments resource: 400, not 404.
-	@ExceptionHandler({PaymentValidationException.class, AccountNotFoundException.class})
+	@ExceptionHandler({PaymentValidationException.class, AccountNotFoundException.class, WebhookValidationException.class})
 	ProblemDetail badRequest(RuntimeException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 	}
@@ -37,8 +39,8 @@ class PaymentExceptionHandler {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
 	}
 
-	@ExceptionHandler(PaymentNotFoundException.class)
-	ProblemDetail notFound(PaymentNotFoundException e) {
+	@ExceptionHandler({PaymentNotFoundException.class, WebhookNotFoundException.class})
+	ProblemDetail notFound(RuntimeException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
 	}
 
