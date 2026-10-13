@@ -1,0 +1,13 @@
+# The service as every environment runs it (docs/episodes/bonus-13). An overlay adds what differs: the image tag, the
+# payment-service ConfigMap and Secret (addresses and credentials), and, locally, the systems the service talks to.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/name: payment-service
+    includeSelectors: true
+resources:
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml
+  - hpa.yaml

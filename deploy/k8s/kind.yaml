@@ -1,0 +1,12 @@
+# The local cluster for deploy/k8s/local: kind create cluster --name payments --config deploy/k8s/kind.yaml
+# Two workers, so the two payment-service pods run on different nodes and one node can be drained (smoke.sh).
+# localhost:30080 reaches the payment-service NodePort.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 30080
+  - role: worker
+  - role: worker

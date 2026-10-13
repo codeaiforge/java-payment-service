@@ -1,0 +1,17 @@
+# Prometheus for the local cluster: scrapes every payment-service pod by itself, found through the Kubernetes API.
+# One scrape through the Service would reach a different pod each time. No alert rules or Alertmanager here:
+# docker-compose.yml has them (docs/episodes/bonus-08).
+scrape_configs:
+  - job_name: payment-service
+    scrape_interval: 5s
+    metrics_path: /actuator/prometheus
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          own_namespace: true
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_container_port_name]
+        regex: payment-service;http
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod

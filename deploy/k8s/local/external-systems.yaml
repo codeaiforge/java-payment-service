@@ -1,0 +1,47 @@
+# The stand-in for the external account, authorization, limit and payment systems: WireMock serving the same
+# fictional data as docker-compose.yml (wiremock/mappings). Each is its own system in production, with its own URL.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-systems
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: external-systems
+  template:
+    metadata:
+      labels:
+        app: external-systems
+    spec:
+      containers:
+        - name: wiremock
+          image: wiremock/wiremock:3.13.2
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /__admin/health
+              port: 8080
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}
+          volumeMounts:
+            - name: mappings
+              mountPath: /home/wiremock/mappings
+              readOnly: true
+      volumes:
+        - name: mappings
+          configMap:
+            name: wiremock-mappings
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-systems
+spec:
+  selector:
+    app: external-systems
+  ports:
+    - port: 8080

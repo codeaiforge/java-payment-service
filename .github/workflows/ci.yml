@@ -17,3 +17,37 @@ jobs:
           java-version: '25'
           cache: maven
       - run: ./mvnw -B verify
+
+  # The Kubernetes manifests render and match the API's schemas (docs/episodes/bonus-13). kubectl is on the runner.
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: curl -sL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+      - run: |
+          for overlay in base local; do
+            kubectl kustomize --load-restrictor LoadRestrictionsNone deploy/k8s/$overlay \
+              | ./kubeconform -strict -summary -kubernetes-version 1.35.0 -
+          done
+
+  # During a rolling update the previous release runs against this release's schema (docs/episodes/bonus-13), so its
+  # tests must pass on it: every migration has to be an expansion the previous code can live with.
+  schema-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: The previous release's tests, against this release's migrations
+        run: |
+          previous=$(git describe --tags --abbrev=0 HEAD^)
+          echo "Previous release: $previous"
+          git worktree add ../previous "$previous"
+          rm -r ../previous/src/main/resources/db/migration
+          cp -r src/main/resources/db/migration ../previous/src/main/resources/db/migration
+          cd ../previous && ./mvnw -B verify

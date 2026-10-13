@@ -1,0 +1,21 @@
+# More pods when the HTTP side is busy. CPU measures request handling, not the Kafka consumers: their topics have one
+# partition each, so one pod per consumer group does all of that work whatever the count (docs/episodes/bonus-07).
+# Lag is the consumers' signal, through KEDA's Kafka scaler (docs/episodes/bonus-13).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: payment-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: payment-service
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

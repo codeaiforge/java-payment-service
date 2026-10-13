@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+spec:
+  # No replicas: the HorizontalPodAutoscaler owns the count (2 to 4, hpa.yaml). A count here would be put back on every
+  # apply, undoing whatever the autoscaler had decided.
+  strategy:
+    # A new pod must be ready before an old one goes: capacity never drops during a rollout.
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    spec:
+      # Must cover the preStop sleep (10s) plus Spring's shutdown phases (spring.lifecycle.timeout-per-shutdown-phase,
+      # 20s each: web, then Kafka listeners and schedulers). After it, the kubelet sends SIGKILL.
+      terminationGracePeriodSeconds: 60
+      # One pod per node where possible, so draining a node takes one replica, not both.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: payment-service
+      securityContext:
+        # The image's ubuntu user. Given by number, so the kubelet can check it isn't root.
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: payment-service
+          image: payment-service
+          ports:
+            - name: http
+              containerPort: 8080
+          # Every address and credential comes from outside the image (Episode 19): the overlay's ConfigMap and Secret.
+          envFrom:
+            - configMapRef:
+                name: payment-service
+            - secretRef:
+                name: payment-service
+          env:
+            # The heap is sized from the container's memory limit. The JVM's default is 25% of it, which wastes most of
+            # the container; 75% leaves the rest for what isn't heap: metaspace, thread stacks, code cache, direct buffers.
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75
+          resources:
+            # The scheduler places pods by requests, and the autoscaler measures CPU against them.
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            # Memory limit = request: a pod is never killed for using what it was promised. The CPU limit is generous,
+            # so start-up (JIT, Flyway) isn't throttled; it is also what the JVM counts as its processors.
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          # Start-up (Flyway, Kafka) gets up to 3 minutes, checked every 2s: a fast start is ready in seconds, a slow one
+          # isn't killed. Liveness and readiness begin only once this has passed.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 2
+            failureThreshold: 90
+          # The process only. Never the database or Kafka: their outage would restart every pod, into the same outage.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          # Whether to send it requests: down while starting and once shutdown begins.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            # Removing the pod from the Service's endpoints and stopping it start at the same moment; the endpoint
+            # change takes a few seconds to reach every node. Until it has, requests still arrive, so SIGTERM waits.
+            preStop:
+              sleep:
+                seconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

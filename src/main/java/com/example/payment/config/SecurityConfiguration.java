@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Authentication: an OAuth2 resource server. Every request needs a valid JWT
- * bearer token, except health, metrics and the API documentation. The token's
+ * bearer token, except health (and its probes), metrics and the API documentation. The token's
  * {@code sub} is the customer ID. The service only consumes tokens: it has no
  * users, no login and no roles.
  *
@@ -30,7 +30,7 @@ public class SecurityConfiguration {
 	SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		return http
 				.authorizeHttpRequests(requests -> requests
-						.requestMatchers("/actuator/health", "/actuator/prometheus", "/v3/api-docs/**",
+						.requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/prometheus", "/v3/api-docs/**",
 								"/swagger-ui.html", "/swagger-ui/**").permitAll()
 						.anyRequest().authenticated())
 				// No answer is a 401 with WWW-Authenticate: Bearer.

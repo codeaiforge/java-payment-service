@@ -36,6 +36,8 @@ architecture driven by requirements rather than by a template.
 - Event contracts that evolve without breaking consumers: Avro, a schema registry, compatibility checked in the build (B10)
 - Calling customers' URLs safely: signed webhooks, durable retries, and no way into our own network (B11)
 - Rate limits per customer that hold across instances, with token buckets in PostgreSQL (B12)
+- Running on Kubernetes: probes that don't restart pods because the database is down, graceful shutdown, and
+  migrations that work with the previous release's code (B13)
 
 ## The final system
 
@@ -111,7 +113,7 @@ fails the build if it does (14, 20).
 **Tech stack:** Java 25, Spring Boot 4.1, PostgreSQL, Flyway, Kafka, Avro, Apicurio Registry, OpenFeign, Apache HttpClient,
 Resilience4j, Spring Security (OAuth2 resource server), Bucket4j, ShedLock, springdoc-openapi,
 Micrometer, OpenTelemetry, Prometheus, Alertmanager, Grafana, Tempo, Loki, Testcontainers, WireMock,
-ArchUnit.
+ArchUnit, Kubernetes (Kustomize, kind).
 
 ## Quick start
 
@@ -123,7 +125,11 @@ Loki) uses about 1.5 GB of memory.
 ./mvnw verify                             # build and run all tests
 ./mvnw spring-boot:run                    # start on :8080; the containers in docker-compose.yml start with it
 docker compose --profile app up --build   # or run the service in a container too, as in production
+deploy/k8s/smoke.sh                       # or on a local Kubernetes cluster (kind), tested through a rolling restart
 ```
+
+The Kubernetes path also needs kind, kubectl, jq and Docker's buildx plugin (Docker Desktop has it; on Ubuntu's
+`docker.io`, `sudo apt install docker-buildx`).
 
 ### Authentication
 
@@ -238,6 +244,7 @@ Each part builds on the one before, in order.
 | B10 | [Versioned Event Schemas](docs/episodes/bonus-10-event-schemas.md) | Avro with a schema registry; a change that breaks a consumer fails the build | `bonus-10-event-schemas` |
 | B11 | [Webhooks](docs/episodes/bonus-11-webhooks.md) | Signed webhooks with durable retries; customer URLs kept out of our network (SSRF) | `bonus-11-webhooks` |
 | B12 | [Rate Limits per Customer](docs/episodes/bonus-12-rate-limits.md) | Token buckets per customer, shared by every instance; `429` with `Retry-After`; fail open | `bonus-12-rate-limits` |
+| B13 | [Deploying to Kubernetes](docs/episodes/bonus-13-kubernetes.md) | Pods replaced without a failed request: probes, graceful shutdown, expand/contract migrations | `bonus-13-kubernetes` |
 
 ## Shortcuts in the code
 
@@ -277,6 +284,8 @@ marker `ponytail:` for the same thing.)
     ([B11](docs/episodes/bonus-11-webhooks.md)).
   - Rate limits are the same for every customer, and nothing limits requests per IP address
     before authentication ([B12](docs/episodes/bonus-12-rate-limits.md)).
+  - On Kubernetes: no mTLS or network policies between services, no GitOps, and secrets are
+    committed examples rather than from a vault ([B13](docs/episodes/bonus-13-kubernetes.md)).
 
 ## About
 

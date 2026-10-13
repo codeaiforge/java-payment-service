@@ -1,0 +1,82 @@
+# The service on a local kind cluster (deploy/k8s/kind.yaml), with minimal stand-ins for everything it talks to.
+# In production those are managed services and only the addresses in the ConfigMap below change.
+# The stand-ins reuse the files docker-compose.yml mounts, outside this directory, so it renders with
+#   kubectl kustomize --load-restrictor LoadRestrictionsNone deploy/k8s/local
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: payments
+resources:
+  - namespace.yaml
+  - ../base
+  - postgres.yaml
+  - kafka.yaml
+  - schema-registry.yaml
+  - external-systems.yaml
+  - observability.yaml
+images:
+  # Built and loaded into kind by smoke.sh: docker build -t payment-service:local . && kind load docker-image ...
+  - name: payment-service
+    newTag: local
+patches:
+  # Reachable from the host on localhost:30080 (kind.yaml maps the port), through every ready pod.
+  - target:
+      kind: Service
+      name: payment-service
+    patch: |-
+      - op: add
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080
+# Generated with a hash in the name: changing a value changes the name the Deployment refers to, which rolls the pods.
+# Every value is an example for the local cluster only, as in docker-compose.yml.
+configMapGenerator:
+  - name: payment-service
+    literals:
+      # The local profile accepts tokens signed with the local key below. A real environment leaves it off and sets
+      # SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, its identity provider, in its Secret.
+      - SPRING_PROFILES_ACTIVE=local
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/payments
+      - SPRING_DATASOURCE_USERNAME=payments
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_KAFKA_PROPERTIES_APICURIO_REGISTRY_URL=http://schema-registry:8080/apis/registry/v3
+      - ACCOUNT_SYSTEM_URL=http://external-systems:8080
+      - AUTHORIZATION_SYSTEM_URL=http://external-systems:8080
+      - LIMIT_SYSTEM_URL=http://external-systems:8080
+      - PAYMENT_SYSTEM_URL=http://external-systems:8080
+      - MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://tempo:4318/v1/traces
+      - MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT=http://loki:3100/otlp/v1/logs
+      # smoke.sh is one customer creating, executing and checking payments as fast as it can (docs/episodes/bonus-12).
+      - PAYMENT_RATE_LIMIT_REQUESTS_PER_SECOND=1000
+      - PAYMENT_RATE_LIMIT_PAYMENTS_PER_MINUTE=10000
+  - name: wiremock-mappings
+    files:
+      - ../../../wiremock/mappings/accounts.json
+      - ../../../wiremock/mappings/alert-receiver.json
+      - ../../../wiremock/mappings/authorizations.json
+      - ../../../wiremock/mappings/limits.json
+      - ../../../wiremock/mappings/payment-orders.json
+      - ../../../wiremock/mappings/refund-orders.json
+  - name: tempo
+    files:
+      - ../../../observability/tempo.yaml
+  - name: loki
+    files:
+      - ../../../observability/loki.yaml
+  - name: prometheus
+    files:
+      - prometheus.yml
+  - name: grafana-datasources
+    files:
+      - ../../../observability/grafana/datasources/prometheus.yml
+      - ../../../observability/grafana/datasources/tempo.yml
+      - ../../../observability/grafana/datasources/loki.yml
+secretGenerator:
+  - name: payment-service
+    literals:
+      - SPRING_DATASOURCE_PASSWORD=payments
+      - PAYMENT_SECURITY_LOCAL_JWT_SECRET=local-only-example-key-not-a-real-secret-0001
+  - name: postgres
+    literals:
+      - POSTGRES_PASSWORD=payments

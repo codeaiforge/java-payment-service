@@ -1,0 +1,41 @@
+# Local only, as in docker-compose.yml (docs/episodes/bonus-10): in-memory storage, so restart Kafka with it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: schema-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: schema-registry
+  template:
+    metadata:
+      labels:
+        app: schema-registry
+    spec:
+      containers:
+        - name: schema-registry
+          image: apicurio/apicurio-registry:3.3.3
+          env:
+            - name: APICURIO_RULES_GLOBAL_COMPATIBILITY
+              value: FULL_TRANSITIVE
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /apis/registry/v3/system/info
+              port: 8080
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 100m, memory: 512Mi}
+            limits: {memory: 768Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: schema-registry
+spec:
+  selector:
+    app: schema-registry
+  ports:
+    - port: 8080

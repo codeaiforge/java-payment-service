@@ -1,0 +1,11 @@
+# A voluntary disruption (a node drained for maintenance, a cluster upgrade) never takes the last running pod.
+# A rollout isn't one: maxUnavailable: 0 in the Deployment covers that.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payment-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-service
