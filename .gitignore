@@ -41,3 +41,5 @@ build/
 *.key
 *.p12
 *.jks
+# Self-signed test keystore for the fake merchant in the webhook tests (B11); not a secret.
+!src/test/resources/webhooks/merchant.p12

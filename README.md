@@ -188,6 +188,13 @@ Then read the episode, read the diff, run that episode's block in
 On early tags, `payments.http` and the API have no auth header and no `Idempotency-Key`.
 They match their episode.
 
+Tags `bonus-11-webhooks` to `bonus-13-kubernetes` are missing the webhook tests' keystore, which
+`.gitignore` kept out by mistake. After checking out one of them, copy it from `main` before running the tests:
+
+```bash
+git checkout main -- src/test/resources/webhooks/merchant.p12
+```
+
 ## Episodes
 
 Four parts: the core of a working service, then correctness when things go wrong
