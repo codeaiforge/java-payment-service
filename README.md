@@ -5,7 +5,7 @@
 ![Spring Boot 4.1](https://img.shields.io/badge/Spring%20Boot-4.1-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A payment service for a fictional bank, built in 27 tagged steps. Every decision a bank
+A payment service for a fictional bank, built in 33 tagged steps. Every decision a bank
 reviewer will question (idempotency, unknown outcomes, reconciliation, the outbox,
 running several instances) is made in the commit that needs it, and explained.
 
@@ -168,6 +168,7 @@ Without the `Authorization` header the answer is `401`.
 | Grafana (anonymous admin) | <http://localhost:3000> |
 | Prometheus | <http://localhost:9090> |
 | Alertmanager | <http://localhost:9093> |
+| Schema registry (Apicurio) | <http://localhost:8085/apis/registry/v3> |
 | WireMock (fake external systems) | <http://localhost:8089> |
 
 ## How to follow along
