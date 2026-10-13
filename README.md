@@ -46,74 +46,65 @@ architecture driven by requirements rather than by a template.
 The aggregate, `Payment`, refuses every move not drawn here.
 
 ```mermaid
-stateDiagram-v2
-    [*] --> CREATED
-    CREATED --> AUTHORIZED
-    AUTHORIZED --> PROCESSING
-    PROCESSING --> COMPLETED
-    PROCESSING --> FAILED
-    CREATED --> CANCELLED
-    AUTHORIZED --> CANCELLED
-    COMPLETED --> [*]
-    FAILED --> [*]
-    CANCELLED --> [*]
-    note right of PROCESSING
-        If the payment system's answer is lost,
-        the payment stays PROCESSING: the money may have moved.
-        Reconciliation (B2) asks again and settles it.
-    end note
-```
-
-### Ports and adapters
-
-```mermaid
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 30, "rankSpacing": 55, "padding": 12}}}%%
 flowchart LR
-    subgraph primary["Primary adapters"]
-        web["RateLimitFilter →<br/>PaymentController · StatementController<br/>WebhookController (REST)"]
-        consumer["PaymentProcessingConsumer<br/>StatementProjectionConsumer<br/>WebhookDeliveryConsumer (Kafka)"]
-        scheduler["ReconciliationScheduler<br/>WebhookDispatchScheduler"]
+    subgraph cancellable["cancel allowed: no money can have moved yet"]
+        CREATED -- authorized --> AUTHORIZED
     end
+    AUTHORIZED -- "within limit" --> PROCESSING
+    PROCESSING -- executed --> COMPLETED
+    PROCESSING -- rejected --> FAILED
+    cancellable -- cancel ----> CANCELLED
 
-    subgraph app["Application"]
-        uc["Primary ports<br/>CreatePaymentUseCase · GetPaymentUseCase<br/>CancelPaymentUseCase · RequestPaymentExecutionUseCase<br/>ExecutePaymentUseCase · RefundPaymentUseCase · GetRefundsUseCase<br/>ReconcilePaymentsUseCase · ReconcileRefundsUseCase<br/>GetStatementUseCase · ProjectPaymentEventUseCase<br/>RegisterWebhookUseCase · GetWebhooksUseCase · DeleteWebhookUseCase<br/>DeliverWebhookUseCase · DispatchWebhooksUseCase"]
-        services["Application services"]
-        domain["Domain<br/>Payment · Refund · WebhookSubscription · value objects"]
-        sp["Secondary ports"]
-        uc --> services --> domain
-        services --> sp
-    end
+    PROCESSING["PROCESSING<br/><small>no answer → stays here</small>"]
+    COMPLETED(["&nbsp;COMPLETED&nbsp;"])
+    FAILED(["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;FAILED&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"])
+    CANCELLED(["&nbsp;CANCELLED&nbsp;"])
 
-    subgraph secondary["Secondary adapters"]
-        jpa["JPA → PostgreSQL<br/>PaymentRepository · RefundRepository<br/>StatementRepository · IdempotencyPort · AuditPort"]
-        outbox["Outbox table<br/>PaymentEventPort"]
-        relay["PaymentEventRelay → Kafka<br/>payment-events (Avro)"]
-        publisher["Kafka publisher<br/>PaymentProcessingPort"]
-        feign["Feign → external systems<br/>AccountEnquiryPort · PaymentAuthorizationPort<br/>PaymentLimitPort · PaymentExecutionPort"]
-        metrics["Micrometer<br/>PaymentMetricsPort"]
-        webhooks["SQL → PostgreSQL<br/>WebhookRepository"]
-        sender["HTTPS → customers' endpoints<br/>WebhookSender"]
-    end
-
-    web --> uc
-    consumer --> uc
-    scheduler --> uc
-    sp --> jpa
-    sp --> outbox
-    outbox -. polled by .-> relay
-    sp --> publisher
-    sp --> feign
-    sp --> metrics
-    sp --> webhooks
-    sp --> sender
+    classDef open fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
+    classDef doubt fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
+    classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:3px
+    classDef bad fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:3px
+    classDef off fill:#f1f5f9,stroke:#64748b,color:#334155,stroke-width:3px
+    classDef group fill:none,stroke:#3b82f6,stroke-dasharray:5 4,color:#3b82f6
+    class CREATED,AUTHORIZED open
+    class PROCESSING doubt
+    class COMPLETED ok
+    class FAILED bad
+    class CANCELLED off
+    class cancellable group
 ```
+
+Rounded boxes are final: a payment never leaves them. If the payment system's answer is lost,
+the payment stays PROCESSING, because the money may have moved. Reconciliation (B2) asks again and settles it.
+
+### Architecture overview
+
+Callers on the left, the hexagonal core in the middle, infrastructure and external systems on the
+right, with observability and delivery below. The numbers on the arrows are explained at the bottom.
+
+<a href="docs/architecture/architecture-light.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/architecture-dark.svg">
+    <img alt="Master architecture of java-payment-service: REST, Kafka and scheduled callers drive the use cases of a hexagonal core with a framework-free domain; secondary adapters reach PostgreSQL, Kafka, the schema registry, the bank's external systems and merchants' webhook endpoints; Prometheus, Loki, Tempo, Alertmanager and Grafana observe it; Maven, GitHub Actions and Kubernetes build and run it." src="docs/architecture/architecture-light.svg">
+  </picture>
+</a>
+
+*Click the diagram to open it full size.*
 
 Dependencies point inwards. The domain imports no Spring, JPA or Feign, and ArchUnit
 fails the build if it does (14, 20).
 
-**Tech stack:** Java 25, Spring Boot 4.1, PostgreSQL, Flyway, Kafka, Avro, Apicurio Registry, OpenFeign, Apache HttpClient,
-Resilience4j, Spring Security (OAuth2 resource server), Bucket4j, ShedLock, springdoc-openapi,
-Micrometer, OpenTelemetry, Prometheus, Alertmanager, Grafana, Tempo, Loki, Testcontainers, WireMock,
-ArchUnit, Kubernetes (Kustomize, kind).
+**Tech stack**, grouped as in the diagram:
+
+| Part | Technology |
+|---|---|
+| Core | Java 25, Spring Boot 4.1, Spring Security (OAuth2 resource server), springdoc-openapi |
+| Storage and coordination | PostgreSQL, Flyway, Spring Data JPA, ShedLock, Bucket4j |
+| Messaging | Kafka, Avro, Apicurio Registry |
+| Calling out | OpenFeign, Resilience4j, Apache HttpClient |
+| Observability | Micrometer, OpenTelemetry, Prometheus, Alertmanager, Grafana, Tempo, Loki |
+| Build, test and delivery | Maven, Docker, GitHub Actions, JUnit 5, Testcontainers, WireMock, ArchUnit, Kubernetes (Kustomize, kind) |
 
 ## Quick start
 
