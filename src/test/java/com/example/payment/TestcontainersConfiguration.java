@@ -24,10 +24,12 @@ public class TestcontainersConfiguration {
 	}
 
 	// SHORTCUT: also started by the @DataJpaTest slices that don't need it; split the class if that start-up shows.
+	// The JVM image, not kafka-native: the native one segfaults at start-up about 1 in 20 times (docs/episodes/19),
+	// and a test has no restart to recover. docker-compose.yml and deploy/k8s restart it, so they keep the native one.
 	@Bean
 	@ServiceConnection
 	KafkaContainer kafka() {
-		return new KafkaContainer("apache/kafka-native:4.1.1");
+		return new KafkaContainer("apache/kafka:4.1.1");
 	}
 
 	// As in docker-compose.yml, with the same compatibility rule (docs/episodes/bonus-10).

@@ -69,7 +69,7 @@ import static org.awaitility.Awaitility.await;
 class MultipleInstancesTest {
 
 	static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18-alpine");
-	static final KafkaContainer kafka = new KafkaContainer("apache/kafka-native:4.1.1");
+	static final KafkaContainer kafka = new KafkaContainer("apache/kafka:4.1.1");
 	static final GenericContainer<?> schemaRegistry = new TestcontainersConfiguration().schemaRegistry();
 
 	@RegisterExtension
