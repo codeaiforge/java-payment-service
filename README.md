@@ -90,7 +90,8 @@ right, with observability and delivery below. The numbers on the arrows are expl
   </picture>
 </a>
 
-*Click the diagram to open it full size.*
+*Click the diagram to open it full size, or explore the
+[interactive version](https://codeaiforge.github.io/java-payment-service/architecture/).*
 
 Dependencies point inwards. The domain imports no Spring, JPA or Feign, and ArchUnit
 fails the build if it does (14, 20).

@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>java-payment-service Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Big+Shoulders+Display:wght@700;800&display=swap">
+<style>
+/* Layout: a drafting sheet. Header with flow controls, the full-size schematic in its own scroller, the selected flow's steps, then the technology inventory. */
+:root {
+  --bg: #e9edf0; --sheet: #f6f8f9; --card: #ffffff; --ink: #14202a; --muted: #5a6975; --rule: #b9c4cc; --grid: #e2e7eb;
+  --prim: #b4561f; --core: #0d6e68; --core-fill: #e1f0ee; --dom-fill: #cfe6e2; --sec: #2d5b9a; --infra: #44515c; --ext: #7a6a4f;
+  --obs: #946200; --dlv: #5c4f86; --pod: #eef3f6; --edge: #26333e;
+  --f-create: #2563c9; --f-execute: #c2410c; --f-events: #0f8a63; --f-recon: #8b3fa8; --f-webhooks: #be185d; --f-telemetry: #a16207;
+  --display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f151a; --sheet: #141c22; --card: #1b252d; --ink: #e3eaef; --muted: #93a3af; --rule: #3a4852; --grid: #1c262d;
+  --prim: #ec8a50; --core: #4cc2b6; --core-fill: #12302d; --dom-fill: #18403b; --sec: #7aa6e6; --infra: #a8b5bf; --ext: #c9b48c;
+  --obs: #e0a733; --dlv: #a99ae0; --pod: #17222a; --edge: #b9c8d3;
+  --f-create: #6b9cf0; --f-execute: #f2763b; --f-events: #34c793; --f-recon: #c58ae0; --f-webhooks: #f06aa6; --f-telemetry: #e4b23e;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f151a; --sheet: #141c22; --card: #1b252d; --ink: #e3eaef; --muted: #93a3af; --rule: #3a4852; --grid: #1c262d;
+  --prim: #ec8a50; --core: #4cc2b6; --core-fill: #12302d; --dom-fill: #18403b; --sec: #7aa6e6; --infra: #a8b5bf; --ext: #c9b48c;
+  --obs: #e0a733; --dlv: #a99ae0; --pod: #17222a; --edge: #b9c8d3;
+  --f-create: #6b9cf0; --f-execute: #f2763b; --f-events: #34c793; --f-recon: #c58ae0; --f-webhooks: #f06aa6; --f-telemetry: #e4b23e;
+  color-scheme: dark; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1760px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 48px; }
+header { display: grid; gap: 14px; margin-bottom: 18px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(34px, 5vw, 60px); line-height: .95; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+h1 span { color: var(--core); }
+.lede { max-width: 78ch; color: var(--muted); margin: 0; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.facts b { color: var(--ink); font-weight: 500; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 3; background: var(--bg); padding-block: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--rule); }
+.bar .lab { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 4px; }
+.fb, .tb { font: 600 13.5px var(--sans); color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 999px; padding: 6px 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.fb:hover, .tb:hover { border-color: var(--ink); }
+.fb[aria-pressed="true"] { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.fb:focus-visible, .tb:focus-visible { outline: 2px solid var(--core); outline-offset: 2px; }
+.sw { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.sw-all { background: conic-gradient(var(--f-create) 0 60deg, var(--f-execute) 0 120deg, var(--f-events) 0 180deg, var(--f-recon) 0 240deg, var(--f-webhooks) 0 300deg, var(--f-telemetry) 0); }
+.sw-create { background: var(--f-create); } .sw-execute { background: var(--f-execute); } .sw-events { background: var(--f-events); }
+.sw-recon { background: var(--f-recon); } .sw-webhooks { background: var(--f-webhooks); } .sw-telemetry { background: var(--f-telemetry); }
+.spacer { flex: 1; }
+.steps { margin: 12px 0 0; padding: 14px 18px 14px 40px; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; display: grid; gap: 4px; max-width: 120ch; }
+.steps li { padding-left: 4px; }
+.steps li::marker { font-family: var(--mono); font-weight: 500; color: var(--flowc, var(--core)); }
+.steps code, .note code { font-family: var(--mono); font-size: .88em; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+.scroller { margin-top: 14px; overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; }
+.scroller.fit svg { width: 100%; height: auto; }
+figure { margin: 0; }
+figcaption { font-size: 13.5px; color: var(--muted); padding: 10px 4px 0; max-width: 110ch; }
+svg { display: block; }
+/* flow highlight (the drawing's own styles live in its <style>) */
+#dg.focus .node, #dg.focus .ew, #dg.focus .hex { opacity: .2; }
+#dg.focus .node.on, #dg.focus .ew.on { opacity: 1; }
+#dg.focus .ew.on .edge { stroke: var(--flowc); stroke-width: 3; marker-end: url(#ahf); }
+#dg.focus .ew.on .edge.noarr { marker-end: none; }
+#dg.focus .ew.on .pill { stroke: var(--flowc); stroke-opacity: 1; stroke-width: 1.5; }
+#dg.focus .ew.on .nb { fill: var(--flowc); }
+#dg.focus .node.on .cardo { stroke: var(--flowc); stroke-width: 2; }
+#dg.focus .node.core.on .hex { opacity: 1; stroke: var(--flowc); }
+.inv { margin-top: 36px; }
+.inv h2 { font-family: var(--display); font-weight: 800; font-size: 30px; margin: 0 0 4px; letter-spacing: .01em; }
+.inv > p { margin: 0 0 16px; color: var(--muted); max-width: 80ch; }
+.ig-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; }
+.ig { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.ig h3 { margin: 0 0 6px; font: 600 11.5px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--core); }
+.ig ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 14px; }
+.note { margin-top: 22px; font-size: 13.5px; color: var(--muted); max-width: 110ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body style="margin:0">
+<div class="wrap">
+<header>
+  <div class="eyebrow">dsofianos78/java-payment-service · commit 5c49194 · master architecture</div>
+  <h1>Payment service, <span>hexagon to cluster</span></h1>
+  <p class="lede">Every runtime component, adapter, port, data store, topic, external system, telemetry path and delivery stage in the repository, drawn from the code and configuration rather than the README. Pick a flow to trace it across the drawing.</p>
+  <div class="facts">
+    <span><b>16</b> use cases</span><span><b>14</b> secondary ports</span><span><b>10</b> REST endpoints</span>
+    <span><b>12</b> Flyway migrations · 12 tables</span><span><b>2</b> topics + retry/DLT</span><span><b>3</b> consumer groups</span>
+    <span><b>4</b> scheduled jobs</span><span><b>4</b> external systems</span><span><b>10</b> compose services</span><span><b>33</b> episodes</span>
+  </div>
+</header>
+<div class="bar" role="toolbar" aria-label="Highlight a flow">
+  <span class="lab">Trace</span><button type="button" class="fb" data-flow="all" aria-pressed="true"><span class="sw sw-all"></span>Everything</button><button type="button" class="fb" data-flow="create" aria-pressed="false"><span class="sw sw-create"></span>Create payment</button><button type="button" class="fb" data-flow="execute" aria-pressed="false"><span class="sw sw-execute"></span>Execute (async)</button><button type="button" class="fb" data-flow="events" aria-pressed="false"><span class="sw sw-events"></span>Payment events</button><button type="button" class="fb" data-flow="recon" aria-pressed="false"><span class="sw sw-recon"></span>Reconciliation</button><button type="button" class="fb" data-flow="webhooks" aria-pressed="false"><span class="sw sw-webhooks"></span>Webhooks</button><button type="button" class="fb" data-flow="telemetry" aria-pressed="false"><span class="sw sw-telemetry"></span>Telemetry &amp; alerts</button>
+  <span class="spacer"></span>
+  <button type="button" class="tb" id="fit" aria-pressed="false">Fit to width</button>
+</div>
+<ol class="steps" data-flow="create" hidden><li>Client sends <code>POST /payments</code> with a Bearer JWT and an <code>Idempotency-Key</code>.</li><li>Spring Security validates the token; the rate limiter takes a token from the customer's buckets, rows in PostgreSQL shared by every replica.</li><li><b>CreatePaymentService</b> checks the key: a retry with the same key gets the same payment back; a different body under the same key is refused.</li><li><b>AccountStateValidator</b> asks the account system (Feign, retry + circuit breaker) that the source account exists, is usable and belongs to the caller.</li><li>The payment is stored <b>CREATED</b> with its idempotency record in one transaction; the client gets <b>201</b>.</li></ol><ol class="steps" data-flow="execute" hidden><li><code>POST /payments/{id}/execute</code>: access is checked, a message goes to <code>payment-processing</code>, and the client gets <b>202</b> only after the broker acknowledged it.</li><li><b>PaymentProcessingConsumer</b> turns the message into an execute command, as the controller does for HTTP.</li><li>Authorization system → <b>AUTHORIZED</b>; limit system → <b>PROCESSING</b>. Each status change is its own short transaction with its audit row, committed before the next external call.</li><li>Payment system <code>POST /payment-orders/{key}</code>: SETTLED → <b>COMPLETED</b>, REJECTED → <b>FAILED</b>, no answer → stays PROCESSING for reconciliation. Never retried.</li><li>The final status writes a <code>payment_outbox</code> row in the same transaction.</li><li>A thrown error goes through retry topics after 5s, 10s and 20s, then to <code>payment-processing-dlt</code>. A duplicate message is refused by the state machine itself.</li></ol><ol class="steps" data-flow="events" hidden><li>Every final status change of a payment or refund inserts a <code>payment_outbox</code> row with the change, plus the current traceparent.</li><li><b>PaymentEventRelay</b> runs every second on every replica and claims each payment's oldest unpublished row with <code>FOR UPDATE SKIP LOCKED</code>, so order per payment holds.</li><li>The event is written as Avro, its schema checked in Apicurio (FULL_TRANSITIVE), and sent to <code>payment-events</code> keyed by payment ID. A row is marked published only after the ack: at least once, never lost.</li><li>Group <b>payment-statement</b> projects it into <code>statement_line</code>, recording the event ID in the same transaction to drop duplicates. That read model serves <code>GET /accounts/{id}/statement</code>.</li><li>Group <b>payment-webhooks</b> queues a delivery for each active endpoint of the payer.</li><li>Published rows are kept 7 days, then deleted hourly by one replica (ShedLock). The topic itself is kept forever, so the statement can be rebuilt by replay.</li></ol><ol class="steps" data-flow="recon" hidden><li>Every minute, one replica takes the <code>reconciliation</code> ShedLock row, timed by the database clock.</li><li>It finds payments and refunds that have been PROCESSING for more than 2 minutes, longer than the payment system's 6s deadline.</li><li>It asks the payment system <code>GET /payment-orders/{key}</code> or <code>/refund-orders/{key}</code>.</li><li>A clear answer is stored by compare-and-set with its audit row and outbox event; still no answer waits for the next run.</li><li><b>PaymentsStuckInProcessing</b> fires when the oldest is over 120s, and is held back while the payment system's breaker is open.</li></ol><ol class="steps" data-flow="webhooks" hidden><li>A customer registers an HTTPS endpoint with <code>POST /webhooks</code>; addresses inside our network are refused.</li><li><b>WebhookDeliveryConsumer</b> turns each payment event into one <code>webhook_delivery</code> per active endpoint of the customer holding the source account.</li><li>Every second, each replica claims due deliveries by lease, with no transaction held open during the send.</li><li><b>HttpWebhookSender</b> posts signed JSON (<code>v1=</code>HMAC-SHA256 over id.timestamp.body) through the SSRF-checking resolver, with no redirects and a 15s deadline.</li><li>2xx is delivered; anything else backs off exponentially with jitter. Past the maximum age it is FAILED and counted against the endpoint, which may be disabled.</li></ol><ol class="steps" data-flow="telemetry" hidden><li>Prometheus scrapes <code>/actuator/prometheus</code> every 5s, with exemplars carrying trace IDs.</li><li>Spans go to Tempo over OTLP/HTTP. The traceparent travels in HTTP and Kafka headers and in the outbox row, so one trace runs from the request to the consumer's calls.</li><li>Every log line goes to the console as ECS JSON and to Loki over OTLP, with trace_id, span_id and correlationId.</li><li>Multi-window burn-rate alerts on two SLOs (99.5% execution success; 99% of POST /payments within 500ms), plus outbox lag, open breakers, stuck payments and a log-based alert.</li><li>Alertmanager sends page or ticket and holds back alerts another one explains. Each alert has a runbook in <code>docs/runbooks</code>.</li></ol>
+<figure>
+  <div class="scroller" id="sc"><svg id="dg" viewBox="0 0 1860 1760" width="1860" height="1760" role="img" aria-label="Master architecture of java-payment-service: a hexagonal Spring Boot payment service with REST, Kafka and scheduled drivers on the left, an application core with use cases and a framework-free domain in the centre, secondary adapters on the right talking to PostgreSQL, Kafka, Apicurio Registry, the bank's external account, authorization, limit and payment systems and merchant webhook endpoints, with the observability stack and the delivery pipeline below." xmlns="http://www.w3.org/2000/svg">
+<style>
+#dg .gridl{fill:none;stroke:var(--grid);stroke-width:1}
+#dg .zone{fill:none;stroke:var(--rule);stroke-width:1;stroke-dasharray:6 5}
+#dg .zone.pod{fill:var(--pod);stroke:var(--core);stroke-dasharray:none;stroke-width:1.5}
+#dg .zl{font:700 12px var(--mono);letter-spacing:.1em;fill:var(--muted)}
+#dg .col{font:600 10.5px var(--mono);letter-spacing:.08em;fill:var(--muted)}
+#dg .node{--k:var(--muted);transition:opacity .2s}
+#dg .prim{--k:var(--prim)} #dg .sec{--k:var(--sec)} #dg .infra{--k:var(--infra)} #dg .ext{--k:var(--ext)}
+#dg .obs,#dg .obsx{--k:var(--obs)} #dg .dlv{--k:var(--dlv)} #dg .chain{--k:var(--core)}
+#dg .cardf{fill:var(--card)}
+#dg .hdrf{fill:var(--k);fill-opacity:.075}
+#dg .cap{fill:var(--k)}
+#dg .hdiv{fill:var(--k);fill-opacity:.3}
+#dg .cardo{fill:none;stroke:var(--rule);stroke-width:1;transition:stroke .2s}
+#dg .chain .cardo{stroke:var(--core);stroke-opacity:.6}
+#dg .ttl{font:700 14px var(--sans);fill:var(--ink)}
+#dg .ctl{font:700 12.5px var(--sans);fill:var(--ink)}
+#dg .sub{font:400 10.5px var(--mono);fill:var(--muted)}
+#dg .ln{font:400 12.5px var(--sans);fill:var(--ink)}
+#dg .ln.sm{font-size:11.5px}
+#dg .mut{font:400 12px var(--sans);fill:var(--muted)}
+#dg .mono{font:500 11.5px var(--mono);fill:var(--k)}
+#dg .hd{font:600 10px var(--mono);letter-spacing:.08em;fill:var(--muted)}
+#dg .b{font-weight:700}
+#dg .hex{fill:var(--core-fill);stroke:var(--core);stroke-width:2;stroke-linejoin:round}
+#dg .dhex{fill:var(--dom-fill);stroke:var(--core);stroke-width:1.2;stroke-dasharray:4 3}
+#dg .hexl{font:800 17px var(--display);letter-spacing:.12em;fill:var(--core)}
+#dg .mini{font:600 9.5px var(--mono);letter-spacing:.08em;fill:var(--core)}
+#dg .uc{font:500 11.5px var(--sans);fill:var(--ink)}
+#dg .ucs{font:700 11.5px var(--sans);fill:var(--ink)}
+#dg .port{font:500 10.5px var(--sans);fill:var(--ink)}
+#dg .st{fill:var(--card);stroke:var(--core);stroke-width:1}
+#dg .st.fin{fill:var(--core)}
+#dg .stt{font:600 9.5px var(--mono);fill:var(--ink)}
+#dg .st.fin+.stt{fill:var(--card)}
+#dg .sme{fill:none;stroke:var(--core);stroke-width:1.2}
+#dg .sma{fill:var(--core)}
+#dg .edge{fill:none;stroke:var(--edge);stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#ah);transition:stroke .2s,stroke-width .2s}
+#dg .edge.noarr{marker-end:none}
+#dg .edge.dash{stroke-dasharray:6 5;stroke-linecap:butt}
+#dg .ahd{fill:var(--edge)}
+#dg .ahf{fill:var(--flowc,var(--edge))}
+#dg .pill{fill:var(--card);stroke:var(--edge);stroke-opacity:.45;stroke-width:1}
+#dg .el{font:500 10.5px var(--mono);fill:var(--ink)}
+#dg .nb{fill:var(--edge);stroke:var(--sheet);stroke-width:2.5;transition:fill .2s}
+#dg .nbt{font:700 11px var(--mono);fill:var(--sheet)}
+#dg .lg{font:400 12.5px var(--sans);fill:var(--ink)}
+</style>
+<defs>
+<marker id="ah" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M1,1.5 L11.5,6 L1,10.5 L3.6,6 z" class="ahd"/></marker>
+<marker id="ahf" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="15" markerHeight="15" markerUnits="userSpaceOnUse" orient="auto"><path d="M1,1.5 L11.5,6 L1,10.5 L3.6,6 z" class="ahf"/></marker>
+<marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto"><path d="M1,1.5 L9.5,5 L1,8.5 L3,5 z" class="sma"/></marker>
+<pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0 L0 0 0 20" class="gridl"/></pattern>
+</defs>
+<rect x="0" y="0" width="1860" height="1760" fill="url(#grid)"/>
+<rect x="14.5" y="70.5" width="245" height="969" rx="12" class="zone"/>
+<text x="28" y="61" class="zl" text-anchor="start" >CALLERS</text>
+<rect x="312.5" y="70.5" width="939" height="969" rx="12" class="zone pod"/>
+<text x="326" y="61" class="zl" text-anchor="start" >PAYMENT-SERVICE POD  ·  Spring Boot 4.1.1 on Java 25  ·  :8080  ·  stateless, 2–4 replicas</text>
+<rect x="1306.5" y="70.5" width="539" height="969" rx="12" class="zone"/>
+<text x="1320" y="61" class="zl" text-anchor="start" >INFRASTRUCTURE &amp; EXTERNAL SYSTEMS</text>
+<rect x="14.5" y="1100.5" width="1831" height="211" rx="12" class="zone"/>
+<text x="28" y="1091" class="zl" text-anchor="start" >OBSERVABILITY STACK</text>
+<rect x="14.5" y="1352.5" width="1831" height="209" rx="12" class="zone"/>
+<text x="28" y="1343" class="zl" text-anchor="start" >BUILD, TEST &amp; DELIVERY</text>
+<g class="node ext" data-f="create execute">
+<clipPath id="cl1"><rect x="26" y="96" width="222" height="150" rx="8"/></clipPath>
+<g clip-path="url(#cl1)"><rect x="26" y="96" width="222" height="150" class="cardf"/><rect x="26" y="96" width="222" height="42" class="hdrf"/><rect x="26" y="96" width="222" height="3" class="cap"/><rect x="26" y="137" width="222" height="1" class="hdiv"/></g>
+<rect x="26.5" y="96.5" width="221" height="149" rx="7.5" class="cardo"/>
+<text x="38" y="116" class="ttl" text-anchor="start" >API client</text>
+<text x="38" y="130" class="sub" text-anchor="start" >a bank customer&#x27;s app</text>
+<text x="38" y="154" class="ln" text-anchor="start">HTTPS + Bearer JWT</text>
+<text x="38" y="169" class="mut" text-anchor="start">token sub = customer ID</text>
+<text x="38" y="184" class="mono" text-anchor="start">Idempotency-Key</text>
+<text x="38" y="199" class="mono" text-anchor="start">X-Correlation-Id</text>
+<text x="38" y="214" class="mut" text-anchor="start">429 carries Retry-After</text>
+<text x="38" y="229" class="mono" text-anchor="start">http/payments.http samples</text>
+</g>
+<g class="node ext" data-f="create execute">
+<clipPath id="cl2"><rect x="26" y="262" width="222" height="122" rx="8"/></clipPath>
+<g clip-path="url(#cl2)"><rect x="26" y="262" width="222" height="122" class="cardf"/><rect x="26" y="262" width="222" height="42" class="hdrf"/><rect x="26" y="262" width="222" height="3" class="cap"/><rect x="26" y="303" width="222" height="1" class="hdiv"/></g>
+<rect x="26.5" y="262.5" width="221" height="121" rx="7.5" class="cardo"/>
+<text x="38" y="282" class="ttl" text-anchor="start" >Identity provider</text>
+<text x="38" y="296" class="sub" text-anchor="start" >token issuer</text>
+<text x="38" y="320" class="ln" text-anchor="start"><tspan class="b">prod:</tspan> issuer-uri → JWKS</text>
+<text x="38" y="335" class="ln" text-anchor="start"><tspan class="b">local:</tspan> HS256 shared key</text>
+<text x="38" y="350" class="mut" text-anchor="start">profile local only; without</text>
+<text x="38" y="365" class="mut" text-anchor="start">either the service won&#x27;t start</text>
+</g>
+<g class="node ext">
+<clipPath id="cl3"><rect x="26" y="878" width="222" height="150" rx="8"/></clipPath>
+<g clip-path="url(#cl3)"><rect x="26" y="878" width="222" height="150" class="cardf"/><rect x="26" y="878" width="222" height="42" class="hdrf"/><rect x="26" y="878" width="222" height="3" class="cap"/><rect x="26" y="919" width="222" height="1" class="hdiv"/></g>
+<rect x="26.5" y="878.5" width="221" height="149" rx="7.5" class="cardo"/>
+<text x="38" y="898" class="ttl" text-anchor="start" >Kubernetes kubelet</text>
+<text x="38" y="912" class="sub" text-anchor="start" >probes &amp; lifecycle</text>
+<text x="38" y="936" class="mono" text-anchor="start">/actuator/health/liveness</text>
+<text x="38" y="951" class="mono" text-anchor="start">/actuator/health/readiness</text>
+<text x="38" y="966" class="mut" text-anchor="start">startup probe ≤ 3 min</text>
+<text x="38" y="981" class="mut" text-anchor="start">preStop sleep 10s, grace 60s</text>
+<text x="38" y="996" class="mut" text-anchor="start">graceful shutdown 20s/phase</text>
+</g>
+<g class="node ext">
+<clipPath id="cl4"><rect x="26" y="400" width="222" height="114" rx="8"/></clipPath>
+<g clip-path="url(#cl4)"><rect x="26" y="400" width="222" height="114" class="cardf"/><rect x="26" y="400" width="222" height="42" class="hdrf"/><rect x="26" y="400" width="222" height="3" class="cap"/><rect x="26" y="441" width="222" height="1" class="hdiv"/></g>
+<rect x="26.5" y="400.5" width="221" height="113" rx="7.5" class="cardo"/>
+<text x="38" y="420" class="ttl" text-anchor="start" >Developer / operator</text>
+<text x="38" y="434" class="sub" text-anchor="start" >docs &amp; tooling</text>
+<text x="38" y="458" class="mono" text-anchor="start">/swagger-ui.html</text>
+<text x="38" y="473" class="mono" text-anchor="start">/v3/api-docs</text>
+<text x="38" y="488" class="mut" text-anchor="start">springdoc-openapi 3.1.1</text>
+<text x="38" y="503" class="mut" text-anchor="start">public: health, prometheus, docs</text>
+</g>
+<g class="node ext" data-f="recon webhooks events">
+<clipPath id="cl5"><rect x="26" y="712" width="222" height="150" rx="8"/></clipPath>
+<g clip-path="url(#cl5)"><rect x="26" y="712" width="222" height="150" class="cardf"/><rect x="26" y="712" width="222" height="42" class="hdrf"/><rect x="26" y="712" width="222" height="3" class="cap"/><rect x="26" y="753" width="222" height="1" class="hdiv"/></g>
+<rect x="26.5" y="712.5" width="221" height="149" rx="7.5" class="cardo"/>
+<text x="38" y="732" class="ttl" text-anchor="start" >Clock</text>
+<text x="38" y="746" class="sub" text-anchor="start" >in-process drivers</text>
+<text x="38" y="770" class="ln" text-anchor="start">Spring <tspan class="b">@Scheduled</tspan></text>
+<text x="38" y="785" class="mut" text-anchor="start">+ ShedLock 7.10 (DB time)</text>
+<text x="38" y="800" class="ln" text-anchor="start">reconcile every <tspan class="b">1m</tspan></text>
+<text x="38" y="815" class="ln" text-anchor="start">webhook dispatch every <tspan class="b">1s</tspan></text>
+<text x="38" y="830" class="ln" text-anchor="start">outbox relay every <tspan class="b">1s</tspan></text>
+<text x="38" y="845" class="ln" text-anchor="start">outbox cleanup every <tspan class="b">1h</tspan></text>
+</g>
+<g class="node ext" data-f="execute events webhooks">
+<clipPath id="cl6"><rect x="26" y="530" width="222" height="152" rx="8"/></clipPath>
+<g clip-path="url(#cl6)"><rect x="26" y="530" width="222" height="152" class="cardf"/><rect x="26" y="530" width="222" height="42" class="hdrf"/><rect x="26" y="530" width="222" height="3" class="cap"/><rect x="26" y="571" width="222" height="1" class="hdiv"/></g>
+<rect x="26.5" y="530.5" width="221" height="151" rx="7.5" class="cardo"/>
+<text x="38" y="550" class="ttl" text-anchor="start" >Kafka (inbound)</text>
+<text x="38" y="564" class="sub" text-anchor="start" >same broker, read back</text>
+<text x="38" y="588" class="ln" text-anchor="start">payment-processing</text>
+<text x="38" y="603" class="mut" text-anchor="start">→ group payment-service</text>
+<text x="38" y="618" class="ln" text-anchor="start">payment-events</text>
+<text x="38" y="633" class="mut" text-anchor="start">→ group payment-statement</text>
+<text x="38" y="648" class="mut" text-anchor="start">→ group payment-webhooks</text>
+</g>
+<g class="node chain" data-f="create execute">
+<clipPath id="cl7"><rect x="326" y="98" width="165" height="50" rx="7"/></clipPath>
+<g clip-path="url(#cl7)"><rect x="326" y="98" width="165" height="50" class="cardf"/><rect x="326" y="98" width="165" height="0" class="hdrf"/><rect x="326" y="98" width="165" height="3" class="cap"/><rect x="326" y="97" width="165" height="1" class="hdiv"/></g>
+<rect x="326.5" y="98.5" width="164" height="49" rx="6.5" class="cardo"/>
+<text x="337" y="118" class="ctl" text-anchor="start" >Tomcat · Spring MVC</text>
+<text x="337" y="135" class="sub" text-anchor="start" >embedded, :8080</text>
+</g>
+<g class="ew" data-f="create execute"><path d="M491,123 L508,123" class="edge"/>
+</g>
+<g class="node chain" data-f="create execute">
+<clipPath id="cl8"><rect x="513" y="98" width="165" height="50" rx="7"/></clipPath>
+<g clip-path="url(#cl8)"><rect x="513" y="98" width="165" height="50" class="cardf"/><rect x="513" y="98" width="165" height="0" class="hdrf"/><rect x="513" y="98" width="165" height="3" class="cap"/><rect x="513" y="97" width="165" height="1" class="hdiv"/></g>
+<rect x="513.5" y="98.5" width="164" height="49" rx="6.5" class="cardo"/>
+<text x="524" y="118" class="ctl" text-anchor="start" >Spring Security</text>
+<text x="524" y="135" class="sub" text-anchor="start" >OAuth2 RS · JWT</text>
+</g>
+<g class="ew" data-f="create execute"><path d="M678,123 L695,123" class="edge"/>
+</g>
+<g class="node chain" data-f="create execute">
+<clipPath id="cl9"><rect x="700" y="98" width="165" height="50" rx="7"/></clipPath>
+<g clip-path="url(#cl9)"><rect x="700" y="98" width="165" height="50" class="cardf"/><rect x="700" y="98" width="165" height="0" class="hdrf"/><rect x="700" y="98" width="165" height="3" class="cap"/><rect x="700" y="97" width="165" height="1" class="hdiv"/></g>
+<rect x="700.5" y="98.5" width="164" height="49" rx="6.5" class="cardo"/>
+<text x="711" y="118" class="ctl" text-anchor="start" >CorrelationIdFilter</text>
+<text x="711" y="135" class="sub" text-anchor="start" >X-Correlation-Id→MDC</text>
+</g>
+<g class="ew" data-f="create execute"><path d="M865,123 L882,123" class="edge"/>
+</g>
+<g class="node chain" data-f="create execute">
+<clipPath id="cl10"><rect x="887" y="98" width="165" height="50" rx="7"/></clipPath>
+<g clip-path="url(#cl10)"><rect x="887" y="98" width="165" height="50" class="cardf"/><rect x="887" y="98" width="165" height="0" class="hdrf"/><rect x="887" y="98" width="165" height="3" class="cap"/><rect x="887" y="97" width="165" height="1" class="hdiv"/></g>
+<rect x="887.5" y="98.5" width="164" height="49" rx="6.5" class="cardo"/>
+<text x="898" y="118" class="ctl" text-anchor="start" >RateLimitFilter</text>
+<text x="898" y="135" class="sub" text-anchor="start" >Bucket4j · 20 req/s</text>
+</g>
+<g class="ew" data-f="create execute"><path d="M1052,123 L1069,123" class="edge"/>
+</g>
+<g class="node chain" data-f="create execute">
+<clipPath id="cl11"><rect x="1074" y="98" width="165" height="50" rx="7"/></clipPath>
+<g clip-path="url(#cl11)"><rect x="1074" y="98" width="165" height="50" class="cardf"/><rect x="1074" y="98" width="165" height="0" class="hdrf"/><rect x="1074" y="98" width="165" height="3" class="cap"/><rect x="1074" y="97" width="165" height="1" class="hdiv"/></g>
+<rect x="1074.5" y="98.5" width="164" height="49" rx="6.5" class="cardo"/>
+<text x="1085" y="118" class="ctl" text-anchor="start" >DispatcherServlet</text>
+<text x="1085" y="135" class="sub" text-anchor="start" >@Valid · ProblemDetail</text>
+</g>
+<text x="326" y="192" class="col" text-anchor="start" >PRIMARY ADAPTERS</text>
+<g class="node prim" data-f="create execute" id="web">
+<clipPath id="cl12"><rect x="326" y="202" width="246" height="300" rx="8"/></clipPath>
+<g clip-path="url(#cl12)"><rect x="326" y="202" width="246" height="300" class="cardf"/><rect x="326" y="202" width="246" height="42" class="hdrf"/><rect x="326" y="202" width="246" height="3" class="cap"/><rect x="326" y="243" width="246" height="1" class="hdiv"/></g>
+<rect x="326.5" y="202.5" width="245" height="299" rx="7.5" class="cardo"/>
+<text x="338" y="222" class="ttl" text-anchor="start" >Web adapter · REST</text>
+<text x="338" y="236" class="sub" text-anchor="start" >3 controllers, request/response DTOs</text>
+<text x="338" y="260" class="mono" text-anchor="start">POST   /payments            201</text>
+<text x="338" y="275" class="mono" text-anchor="start">GET    /payments/{id}</text>
+<text x="338" y="290" class="mono" text-anchor="start">POST   /payments/{id}/execute 202</text>
+<text x="338" y="305" class="mono" text-anchor="start">POST   /payments/{id}/cancel</text>
+<text x="338" y="320" class="mono" text-anchor="start">POST   /payments/{id}/refunds 201</text>
+<text x="338" y="335" class="mono" text-anchor="start">GET    /payments/{id}/refunds</text>
+<text x="338" y="350" class="mono" text-anchor="start">GET    /accounts/{id}/statement</text>
+<text x="338" y="365" class="mono" text-anchor="start">POST   /webhooks            201</text>
+<text x="338" y="380" class="mono" text-anchor="start">GET    /webhooks</text>
+<text x="338" y="395" class="mono" text-anchor="start">DELETE /webhooks/{id}       204</text>
+<text x="338" y="416" class="ln" text-anchor="start">PaymentExceptionHandler →</text>
+<text x="338" y="431" class="mut" text-anchor="start">RFC 9457 problem details:</text>
+<text x="338" y="446" class="mut" text-anchor="start">400 · 403 · 404 · 409 · 422 · 503</text>
+</g>
+<g class="node prim" data-f="execute events webhooks" id="msg">
+<clipPath id="cl13"><rect x="326" y="520" width="246" height="210" rx="8"/></clipPath>
+<g clip-path="url(#cl13)"><rect x="326" y="520" width="246" height="210" class="cardf"/><rect x="326" y="520" width="246" height="42" class="hdrf"/><rect x="326" y="520" width="246" height="3" class="cap"/><rect x="326" y="561" width="246" height="1" class="hdiv"/></g>
+<rect x="326.5" y="520.5" width="245" height="209" rx="7.5" class="cardo"/>
+<text x="338" y="540" class="ttl" text-anchor="start" >Messaging adapter · Kafka</text>
+<text x="338" y="554" class="sub" text-anchor="start" >@KafkaListener, at-least-once</text>
+<text x="338" y="578" class="ln" text-anchor="start"><tspan class="b">PaymentProcessingConsumer</tspan></text>
+<text x="338" y="593" class="mut" text-anchor="start">payment-processing · JSON</text>
+<text x="338" y="608" class="ln" text-anchor="start"><tspan class="b">StatementProjectionConsumer</tspan></text>
+<text x="338" y="623" class="mut" text-anchor="start">payment-events · Avro · own group</text>
+<text x="338" y="638" class="ln" text-anchor="start"><tspan class="b">WebhookDeliveryConsumer</tspan></text>
+<text x="338" y="653" class="mut" text-anchor="start">payment-events · Avro · own group</text>
+<text x="338" y="668" class="ln" text-anchor="start">retry topics 5s · 10s · 20s</text>
+<text x="338" y="683" class="mut" text-anchor="start">then *-dlt (dead-letter topic)</text>
+</g>
+<g class="node prim" data-f="recon webhooks" id="sched">
+<clipPath id="cl14"><rect x="326" y="748" width="246" height="150" rx="8"/></clipPath>
+<g clip-path="url(#cl14)"><rect x="326" y="748" width="246" height="150" class="cardf"/><rect x="326" y="748" width="246" height="42" class="hdrf"/><rect x="326" y="748" width="246" height="3" class="cap"/><rect x="326" y="789" width="246" height="1" class="hdiv"/></g>
+<rect x="326.5" y="748.5" width="245" height="149" rx="7.5" class="cardo"/>
+<text x="338" y="768" class="ttl" text-anchor="start" >Scheduling adapter</text>
+<text x="338" y="782" class="sub" text-anchor="start" >a clock as a caller</text>
+<text x="338" y="806" class="ln" text-anchor="start"><tspan class="b">ReconciliationScheduler</tspan></text>
+<text x="338" y="821" class="mut" text-anchor="start">every 1m, ShedLock “reconciliation”</text>
+<text x="338" y="836" class="mut" text-anchor="start">lock ≤10m / ≥30s, threshold 2m</text>
+<text x="338" y="851" class="ln" text-anchor="start"><tspan class="b">WebhookDispatchScheduler</tspan></text>
+<text x="338" y="866" class="mut" text-anchor="start">every 1s on every instance,</text>
+<text x="338" y="881" class="mut" text-anchor="start">deliveries claimed by lease</text>
+</g>
+<g class="node core" data-f="create execute events recon webhooks"><polygon points="682,186 896,186 966,540 896,894 682,894 612,540" class="hex"/></g>
+<text x="789" y="210" class="hexl" text-anchor="middle" >APPLICATION CORE</text>
+<text x="789" y="225" class="sub" text-anchor="middle" >use cases &amp; ports</text>
+<text x="686" y="248" class="mini" text-anchor="start" >12 COMMANDS</text>
+<text x="840" y="248" class="mini" text-anchor="start" >4 QUERIES</text>
+<text x="686" y="262" class="uc" text-anchor="start" >CreatePayment</text>
+<text x="686" y="275.5" class="uc" text-anchor="start" >RequestPaymentExecution</text>
+<text x="686" y="289" class="uc" text-anchor="start" >ExecutePayment</text>
+<text x="686" y="302.5" class="uc" text-anchor="start" >CancelPayment</text>
+<text x="686" y="316" class="uc" text-anchor="start" >RefundPayment</text>
+<text x="686" y="329.5" class="uc" text-anchor="start" >ReconcilePayments</text>
+<text x="686" y="343" class="uc" text-anchor="start" >ReconcileRefunds</text>
+<text x="686" y="356.5" class="uc" text-anchor="start" >ProjectPaymentEvent</text>
+<text x="686" y="370" class="uc" text-anchor="start" >RegisterWebhook</text>
+<text x="686" y="383.5" class="uc" text-anchor="start" >DeleteWebhook</text>
+<text x="686" y="397" class="uc" text-anchor="start" >DeliverWebhook</text>
+<text x="686" y="410.5" class="uc" text-anchor="start" >DispatchWebhooks</text>
+<text x="840" y="262" class="uc" text-anchor="start" >GetPayment</text>
+<text x="840" y="275.5" class="uc" text-anchor="start" >GetRefunds</text>
+<text x="840" y="289" class="uc" text-anchor="start" >GetStatement</text>
+<text x="840" y="302.5" class="uc" text-anchor="start" >GetWebhooks</text>
+<text x="840" y="326" class="ucs" text-anchor="start" >AccountStateValidator</text>
+<text x="840" y="339.5" class="sub" text-anchor="start" >ownership &amp; access</text>
+<text x="840" y="362.5" class="sub" text-anchor="start" >short transaction</text>
+<text x="840" y="376" class="sub" text-anchor="start" >per status change</text>
+<polygon points="710,438 868,438 912,600 868,762 710,762 666,600" class="dhex"/>
+<text x="789" y="458" class="hexl" text-anchor="middle" >DOMAIN</text>
+<text x="789" y="472" class="sub" text-anchor="middle" >framework-free (ArchUnit-enforced)</text>
+<rect x="706.5" y="500.5" width="83" height="18" rx="9" class="st"/>
+<text x="748" y="512.5" class="stt" text-anchor="middle" >CREATED</text>
+<rect x="706.5" y="530.5" width="83" height="18" rx="9" class="st"/>
+<text x="748" y="542.5" class="stt" text-anchor="middle" >AUTHORIZED</text>
+<rect x="706.5" y="560.5" width="83" height="18" rx="9" class="st"/>
+<text x="748" y="572.5" class="stt" text-anchor="middle" >PROCESSING</text>
+<rect x="706.5" y="592.5" width="83" height="18" rx="9" class="st fin"/>
+<text x="748" y="604.5" class="stt" text-anchor="middle" >COMPLETED</text>
+<rect x="798.5" y="592.5" width="83" height="18" rx="9" class="st fin"/>
+<text x="840" y="604.5" class="stt" text-anchor="middle" >FAILED</text>
+<rect x="798.5" y="515.5" width="83" height="18" rx="9" class="st fin"/>
+<text x="840" y="527.5" class="stt" text-anchor="middle" >CANCELLED</text>
+<path d="M748,518 L748,530" class="sme" marker-end="url(#ahs)"/>
+<path d="M748,548 L748,560" class="sme" marker-end="url(#ahs)"/>
+<path d="M748,578 L748,592" class="sme" marker-end="url(#ahs)"/>
+<path d="M770,578 L810,592" class="sme" marker-end="url(#ahs)"/>
+<path d="M790,509 L798,520" class="sme" marker-end="url(#ahs)"/>
+<path d="M790,539 L798,530" class="sme" marker-end="url(#ahs)"/>
+<text x="789" y="628" class="sub" text-anchor="middle" >cancel only before PROCESSING</text>
+<text x="789" y="648" class="ln sm" text-anchor="middle"><tspan class="b">Refund</tspan> PROCESSING→COMPLETED|FAILED</text>
+<text x="789" y="662" class="ln sm" text-anchor="middle"><tspan class="b">RefundPolicy</tspan> · <tspan class="b">WebhookSubscription</tspan></text>
+<text x="789" y="676" class="ln sm" text-anchor="middle"><tspan class="b">PaymentEvent</tspan> · 5 event types</text>
+<text x="789" y="690" class="ln sm" text-anchor="middle">Money · Currency · AccountId</text>
+<text x="789" y="704" class="ln sm" text-anchor="middle">PaymentId · PaymentReference</text>
+<text x="789" y="784" class="mini" text-anchor="middle" >14 SECONDARY PORTS · core-owned</text>
+<text x="789" y="798" class="port" text-anchor="middle" >PaymentRepository · RefundRepository</text>
+<text x="789" y="809" class="port" text-anchor="middle" >StatementRepository · WebhookRepository</text>
+<text x="789" y="820" class="port" text-anchor="middle" >IdempotencyPort · AuditPort</text>
+<text x="789" y="831" class="port" text-anchor="middle" >PaymentEventPort · AccountEnquiryPort</text>
+<text x="789" y="842" class="port" text-anchor="middle" >PaymentAuthorizationPort</text>
+<text x="789" y="853" class="port" text-anchor="middle" >PaymentLimitPort · PaymentExecutionPort</text>
+<text x="789" y="864" class="port" text-anchor="middle" >PaymentProcessingPort · WebhookSender</text>
+<text x="789" y="875" class="port" text-anchor="middle" >PaymentMetricsPort</text>
+<text x="1006" y="192" class="col" text-anchor="start" >SECONDARY ADAPTERS</text>
+<g class="node sec" data-f="create execute events recon webhooks" id="pers">
+<clipPath id="cl15"><rect x="1006" y="202" width="234" height="196" rx="8"/></clipPath>
+<g clip-path="url(#cl15)"><rect x="1006" y="202" width="234" height="196" class="cardf"/><rect x="1006" y="202" width="234" height="42" class="hdrf"/><rect x="1006" y="202" width="234" height="3" class="cap"/><rect x="1006" y="243" width="234" height="1" class="hdiv"/></g>
+<rect x="1006.5" y="202.5" width="233" height="195" rx="7.5" class="cardo"/>
+<text x="1018" y="222" class="ttl" text-anchor="start" >Persistence adapter</text>
+<text x="1018" y="236" class="sub" text-anchor="start" >Spring Data JPA · Hibernate</text>
+<text x="1018" y="260" class="ln" text-anchor="start">7 adapters: Payment · Refund ·</text>
+<text x="1018" y="275" class="mut" text-anchor="start">Idempotency · Audit · Outbox ·</text>
+<text x="1018" y="290" class="mut" text-anchor="start">Statement · Webhook</text>
+<text x="1018" y="305" class="ln" text-anchor="start">ddl-auto=<tspan class="b">validate</tspan>, Flyway owns schema</text>
+<text x="1018" y="320" class="ln" text-anchor="start">compare-and-set status updates</text>
+<text x="1018" y="335" class="mono" text-anchor="start">FOR UPDATE SKIP LOCKED</text>
+<text x="1018" y="350" class="mut" text-anchor="start">(outbox claim, webhook leases)</text>
+<text x="1018" y="365" class="ln" text-anchor="start">HikariCP pool · open-in-view off</text>
+</g>
+<g class="node sec" data-f="create execute recon" id="feign">
+<clipPath id="cl16"><rect x="1006" y="414" width="234" height="196" rx="8"/></clipPath>
+<g clip-path="url(#cl16)"><rect x="1006" y="414" width="234" height="196" class="cardf"/><rect x="1006" y="414" width="234" height="42" class="hdrf"/><rect x="1006" y="414" width="234" height="3" class="cap"/><rect x="1006" y="455" width="234" height="1" class="hdiv"/></g>
+<rect x="1006.5" y="414.5" width="233" height="195" rx="7.5" class="cardo"/>
+<text x="1018" y="434" class="ttl" text-anchor="start" >HTTP clients · OpenFeign</text>
+<text x="1018" y="448" class="sub" text-anchor="start" >Spring Cloud 2025.1.3</text>
+<text x="1018" y="472" class="ln" text-anchor="start">Account · Authorization · Limit ·</text>
+<text x="1018" y="487" class="mut" text-anchor="start">PaymentExecution clients</text>
+<text x="1018" y="502" class="ln" text-anchor="start"><tspan class="b">Resilience4j 2.4</tspan> per system:</text>
+<text x="1018" y="517" class="mut" text-anchor="start">circuit breaker 10 calls, 50%, 10s open</text>
+<text x="1018" y="532" class="mut" text-anchor="start">retry ×3, 200ms exp. (queries only)</text>
+<text x="1018" y="547" class="mut" text-anchor="start">execution &amp; refunds: never retried</text>
+<text x="1018" y="562" class="ln" text-anchor="start">timeouts 1s connect / 2s read</text>
+<text x="1018" y="577" class="mut" text-anchor="start">payment system read: 5s</text>
+</g>
+<g class="node sec" data-f="execute events" id="pub">
+<clipPath id="cl17"><rect x="1006" y="626" width="234" height="160" rx="8"/></clipPath>
+<g clip-path="url(#cl17)"><rect x="1006" y="626" width="234" height="160" class="cardf"/><rect x="1006" y="626" width="234" height="42" class="hdrf"/><rect x="1006" y="626" width="234" height="3" class="cap"/><rect x="1006" y="667" width="234" height="1" class="hdiv"/></g>
+<rect x="1006.5" y="626.5" width="233" height="159" rx="7.5" class="cardo"/>
+<text x="1018" y="646" class="ttl" text-anchor="start" >Messaging publishers</text>
+<text x="1018" y="660" class="sub" text-anchor="start" >spring-kafka · KafkaTemplate</text>
+<text x="1018" y="684" class="ln" text-anchor="start"><tspan class="b">PaymentProcessingPublisher</tspan></text>
+<text x="1018" y="699" class="mut" text-anchor="start">JSON, waits for broker ack</text>
+<text x="1018" y="714" class="ln" text-anchor="start"><tspan class="b">PaymentEventRelay</tspan> (outbox)</text>
+<text x="1018" y="729" class="mut" text-anchor="start">every 1s, batch 100, Avro + traceparent</text>
+<text x="1018" y="744" class="mut" text-anchor="start">cleanup 1h, ShedLock, keep 7d</text>
+<text x="1018" y="759" class="mut" text-anchor="start">producer deadline ≤ 5s</text>
+</g>
+<g class="node sec" data-f="webhooks" id="hook">
+<clipPath id="cl18"><rect x="1006" y="802" width="234" height="120" rx="8"/></clipPath>
+<g clip-path="url(#cl18)"><rect x="1006" y="802" width="234" height="120" class="cardf"/><rect x="1006" y="802" width="234" height="42" class="hdrf"/><rect x="1006" y="802" width="234" height="3" class="cap"/><rect x="1006" y="843" width="234" height="1" class="hdiv"/></g>
+<rect x="1006.5" y="802.5" width="233" height="119" rx="7.5" class="cardo"/>
+<text x="1018" y="822" class="ttl" text-anchor="start" >Webhook sender</text>
+<text x="1018" y="836" class="sub" text-anchor="start" >Apache HttpClient 5</text>
+<text x="1018" y="860" class="ln" text-anchor="start">PublicAddressResolver: SSRF guard</text>
+<text x="1018" y="875" class="mono" text-anchor="start">Webhook-Signature: v1=HMAC-SHA256</text>
+<text x="1018" y="890" class="mut" text-anchor="start">no redirects, no retries, no tracing</text>
+<text x="1018" y="905" class="mut" text-anchor="start">3s connect · 10s read · 15s deadline</text>
+</g>
+<g class="node obs" data-f="telemetry" id="ostrip">
+<clipPath id="cl19"><rect x="326" y="936" width="914" height="92" rx="8"/></clipPath>
+<g clip-path="url(#cl19)"><rect x="326" y="936" width="914" height="92" class="cardf"/><rect x="326" y="936" width="914" height="31" class="hdrf"/><rect x="326" y="936" width="914" height="3" class="cap"/><rect x="326" y="966" width="914" height="1" class="hdiv"/></g>
+<rect x="326.5" y="936.5" width="913" height="91" rx="7.5" class="cardo"/>
+<text x="338" y="957" class="ttl" text-anchor="start" >Cross-cutting observability  ·  infrastructure/observability</text>
+</g>
+<text x="338" y="976" class="ln" text-anchor="start"><tspan class="b">Micrometer</tspan> → /actuator/prometheus</text>
+<text x="338" y="991" class="mut" text-anchor="start">payment counters, gauges, timers</text>
+<text x="338" y="1006" class="mut" text-anchor="start">500ms SLO bucket · Resilience4j metrics</text>
+<text x="650" y="976" class="ln" text-anchor="start"><tspan class="b">Micrometer Tracing</tspan> → OTel bridge</text>
+<text x="650" y="991" class="mut" text-anchor="start">OTLP/HTTP · sampling 10% (local 100%)</text>
+<text x="650" y="1006" class="mut" text-anchor="start">HTTP, Feign, Kafka, @Scheduled spans</text>
+<text x="932" y="976" class="ln" text-anchor="start"><tspan class="b">Logback</tspan>: ECS JSON console + OTel</text>
+<text x="932" y="991" class="mut" text-anchor="start">appender → OTLP logs, batched queue</text>
+<text x="932" y="1006" class="mut" text-anchor="start">correlationId via HTTP, Feign, Kafka</text>
+<g class="node infra" data-f="create execute events recon webhooks" id="pg">
+<clipPath id="cl20"><rect x="1320" y="96" width="512" height="262" rx="8"/></clipPath>
+<g clip-path="url(#cl20)"><rect x="1320" y="96" width="512" height="262" class="cardf"/><rect x="1320" y="96" width="512" height="42" class="hdrf"/><rect x="1320" y="96" width="512" height="3" class="cap"/><rect x="1320" y="137" width="512" height="1" class="hdiv"/></g>
+<rect x="1320.5" y="96.5" width="511" height="261" rx="7.5" class="cardo"/>
+<text x="1332" y="116" class="ttl" text-anchor="start" >PostgreSQL 18</text>
+<text x="1332" y="130" class="sub" text-anchor="start" >postgres:18-alpine · system of record and coordination</text>
+<text x="1332" y="154" class="hd" text-anchor="start">WRITE MODEL</text>
+<text x="1332" y="168.6" class="mono" text-anchor="start">payment · refund · idempotency_key</text>
+<text x="1332" y="183.2" class="hd" text-anchor="start">AUDIT TRAIL</text>
+<text x="1332" y="197.8" class="mono" text-anchor="start">payment_audit · refund_audit</text>
+<text x="1332" y="212.4" class="hd" text-anchor="start">TRANSACTIONAL OUTBOX</text>
+<text x="1332" y="227" class="mono" text-anchor="start">payment_outbox (+ trace_context, reference)</text>
+<text x="1332" y="241.6" class="hd" text-anchor="start">READ MODEL · statement</text>
+<text x="1332" y="256.2" class="mono" text-anchor="start">statement_line · statement_processed_event</text>
+<text x="1332" y="270.8" class="hd" text-anchor="start">WEBHOOKS</text>
+<text x="1332" y="285.4" class="mono" text-anchor="start">webhook_subscription · webhook_delivery</text>
+<text x="1332" y="300" class="hd" text-anchor="start">COORDINATION ACROSS REPLICAS</text>
+<text x="1332" y="314.6" class="mono" text-anchor="start">shedlock · rate_limit_bucket</text>
+<text x="1332" y="329.2" class="mut" text-anchor="start">Flyway V1–V12, expand-only (checked in CI against the previous release)</text>
+</g>
+<g class="node infra" data-f="execute events webhooks" id="kafka">
+<clipPath id="cl21"><rect x="1320" y="568" width="512" height="182" rx="8"/></clipPath>
+<g clip-path="url(#cl21)"><rect x="1320" y="568" width="512" height="182" class="cardf"/><rect x="1320" y="568" width="512" height="42" class="hdrf"/><rect x="1320" y="568" width="512" height="3" class="cap"/><rect x="1320" y="609" width="512" height="1" class="hdiv"/></g>
+<rect x="1320.5" y="568.5" width="511" height="181" rx="7.5" class="cardo"/>
+<text x="1332" y="588" class="ttl" text-anchor="start" >Apache Kafka 4.1.1</text>
+<text x="1332" y="602" class="sub" text-anchor="start" >apache/kafka-native · KRaft, no ZooKeeper</text>
+<text x="1332" y="626" class="hd" text-anchor="start">COMMAND TOPIC · JSON, key = paymentId</text>
+<text x="1332" y="640.6" class="mono" text-anchor="start">payment-processing</text>
+<text x="1332" y="655.2" class="mut" text-anchor="start">  + retry topics 5s/10s/20s → payment-processing-dlt</text>
+<text x="1332" y="669.8" class="hd" text-anchor="start">EVENT TOPIC · Avro, key = paymentId, retention −1 (forever)</text>
+<text x="1332" y="684.4" class="mono" text-anchor="start">payment-events</text>
+<text x="1332" y="699" class="mut" text-anchor="start">  + retry topics → payment-events-dlt; replay rebuilds the statement</text>
+<text x="1332" y="713.6" class="hd" text-anchor="start">CONSUMER GROUPS</text>
+<text x="1332" y="728.2" class="mono" text-anchor="start">payment-service · payment-statement · payment-webhooks</text>
+</g>
+<g class="node infra" data-f="events" id="apicurio">
+<clipPath id="cl22"><rect x="1320" y="760" width="512" height="82" rx="8"/></clipPath>
+<g clip-path="url(#cl22)"><rect x="1320" y="760" width="512" height="82" class="cardf"/><rect x="1320" y="760" width="512" height="42" class="hdrf"/><rect x="1320" y="760" width="512" height="3" class="cap"/><rect x="1320" y="801" width="512" height="1" class="hdiv"/></g>
+<rect x="1320.5" y="760.5" width="511" height="81" rx="7.5" class="cardo"/>
+<text x="1332" y="780" class="ttl" text-anchor="start" >Apicurio Registry 3.3.3</text>
+<text x="1332" y="794" class="sub" text-anchor="start" >schema registry · Avro 1.12.2</text>
+<text x="1332" y="818" class="mono" text-anchor="start">payment-events-value  ·  FULL_TRANSITIVE compatibility</text>
+<text x="1332" y="833" class="mut" text-anchor="start">schema in src/main/avro, contract test against released v1.avsc</text>
+</g>
+<g class="node infra" data-f="create execute recon" id="ext">
+<clipPath id="cl23"><rect x="1320" y="374" width="512" height="178" rx="8"/></clipPath>
+<g clip-path="url(#cl23)"><rect x="1320" y="374" width="512" height="178" class="cardf"/><rect x="1320" y="374" width="512" height="42" class="hdrf"/><rect x="1320" y="374" width="512" height="3" class="cap"/><rect x="1320" y="415" width="512" height="1" class="hdiv"/></g>
+<rect x="1320.5" y="374.5" width="511" height="177" rx="7.5" class="cardo"/>
+<text x="1332" y="394" class="ttl" text-anchor="start" >Bank core systems (external)</text>
+<text x="1332" y="408" class="sub" text-anchor="start" >WireMock 3.13.2 stands in locally · wiremock/mappings</text>
+<text x="1332" y="432" class="ln" text-anchor="start"><tspan class="b">Account system</tspan> · GET /accounts/{accountNumber}</text>
+<text x="1332" y="447" class="ln" text-anchor="start"><tspan class="b">Authorization system</tspan> · POST /authorizations</text>
+<text x="1332" y="462" class="ln" text-anchor="start"><tspan class="b">Limit system</tspan> · POST /limit-checks</text>
+<text x="1332" y="477" class="ln" text-anchor="start"><tspan class="b">Payment system</tspan> · POST, GET /payment-orders/{idempotencyKey}</text>
+<text x="1332" y="492" class="mut" text-anchor="start">  (execute and reconcile; the payment ID is the key)</text>
+<text x="1332" y="507" class="ln" text-anchor="start"><tspan class="b">Payment system</tspan> · POST, GET /refund-orders/{idempotencyKey}</text>
+<text x="1332" y="522" class="mut" text-anchor="start">no answer from the payment system = outcome UNKNOWN → reconciliation</text>
+</g>
+<g class="node infra" data-f="webhooks" id="merchant">
+<clipPath id="cl24"><rect x="1320" y="856" width="512" height="118" rx="8"/></clipPath>
+<g clip-path="url(#cl24)"><rect x="1320" y="856" width="512" height="118" class="cardf"/><rect x="1320" y="856" width="512" height="42" class="hdrf"/><rect x="1320" y="856" width="512" height="3" class="cap"/><rect x="1320" y="897" width="512" height="1" class="hdiv"/></g>
+<rect x="1320.5" y="856.5" width="511" height="117" rx="7.5" class="cardo"/>
+<text x="1332" y="876" class="ttl" text-anchor="start" >Merchant webhook endpoints</text>
+<text x="1332" y="890" class="sub" text-anchor="start" >customer-owned HTTPS URLs, untrusted</text>
+<text x="1332" y="914" class="mono" text-anchor="start">Webhook-Id · Webhook-Timestamp · Webhook-Signature</text>
+<text x="1332" y="929" class="ln" text-anchor="start">2xx = delivered; else exponential backoff with jitter</text>
+<text x="1332" y="944" class="mut" text-anchor="start">given up after max age → FAILED; repeated failures disable it</text>
+<text x="1332" y="959" class="mut" text-anchor="start">loopback, private and link-local addresses refused</text>
+</g>
+<g class="node obsx" data-f="telemetry" id="prom">
+<clipPath id="cl25"><rect x="26" y="1118" width="396" height="166" rx="8"/></clipPath>
+<g clip-path="url(#cl25)"><rect x="26" y="1118" width="396" height="166" class="cardf"/><rect x="26" y="1118" width="396" height="42" class="hdrf"/><rect x="26" y="1118" width="396" height="3" class="cap"/><rect x="26" y="1159" width="396" height="1" class="hdiv"/></g>
+<rect x="26.5" y="1118.5" width="395" height="165" rx="7.5" class="cardo"/>
+<text x="38" y="1138" class="ttl" text-anchor="start" >Prometheus v3.7.3</text>
+<text x="38" y="1152" class="sub" text-anchor="start" >pull · exemplar storage</text>
+<text x="38" y="1176" class="ln" text-anchor="start">scrape /actuator/prometheus every 5s</text>
+<text x="38" y="1190.5" class="hd" text-anchor="start">SLO BURN-RATE ALERTS (fast page / slow ticket)</text>
+<text x="38" y="1205" class="mut" text-anchor="start">success 99.5% · POST /payments ≤500ms 99%</text>
+<text x="38" y="1219.5" class="hd" text-anchor="start">OPERATIONAL ALERTS</text>
+<text x="38" y="1234" class="mut" text-anchor="start">PaymentsStuckInProcessing · OutboxLag</text>
+<text x="38" y="1248.5" class="mut" text-anchor="start">CircuitBreakerOpen</text>
+</g>
+<g class="node obsx" data-f="telemetry" id="loki">
+<clipPath id="cl26"><rect x="438" y="1118" width="320" height="166" rx="8"/></clipPath>
+<g clip-path="url(#cl26)"><rect x="438" y="1118" width="320" height="166" class="cardf"/><rect x="438" y="1118" width="320" height="42" class="hdrf"/><rect x="438" y="1118" width="320" height="3" class="cap"/><rect x="438" y="1159" width="320" height="1" class="hdiv"/></g>
+<rect x="438.5" y="1118.5" width="319" height="165" rx="7.5" class="cardo"/>
+<text x="450" y="1138" class="ttl" text-anchor="start" >Loki 3.5.7</text>
+<text x="450" y="1152" class="sub" text-anchor="start" >logs · OTLP/HTTP :3100</text>
+<text x="450" y="1176" class="ln" text-anchor="start">labels: service_name,</text>
+<text x="450" y="1190.5" class="mut" text-anchor="start">deployment.environment.name</text>
+<text x="450" y="1205" class="ln" text-anchor="start">metadata: trace_id, span_id,</text>
+<text x="450" y="1219.5" class="mut" text-anchor="start">correlationId · retention 7d</text>
+<text x="450" y="1234" class="hd" text-anchor="start">RULER ALERT</text>
+<text x="450" y="1248.5" class="mut" text-anchor="start">UnknownPaymentSystemStatus</text>
+</g>
+<g class="node obsx" data-f="telemetry" id="tempo">
+<clipPath id="cl27"><rect x="774" y="1118" width="300" height="166" rx="8"/></clipPath>
+<g clip-path="url(#cl27)"><rect x="774" y="1118" width="300" height="166" class="cardf"/><rect x="774" y="1118" width="300" height="42" class="hdrf"/><rect x="774" y="1118" width="300" height="3" class="cap"/><rect x="774" y="1159" width="300" height="1" class="hdiv"/></g>
+<rect x="774.5" y="1118.5" width="299" height="165" rx="7.5" class="cardo"/>
+<text x="786" y="1138" class="ttl" text-anchor="start" >Tempo 2.9.0</text>
+<text x="786" y="1152" class="sub" text-anchor="start" >traces · OTLP/HTTP :4318</text>
+<text x="786" y="1176" class="ln" text-anchor="start">one trace across HTTP →</text>
+<text x="786" y="1190.5" class="mut" text-anchor="start">Kafka → consumer → Feign</text>
+<text x="786" y="1205" class="ln" text-anchor="start">outbox rows keep traceparent,</text>
+<text x="786" y="1219.5" class="mut" text-anchor="start">so the relay&#x27;s send joins the</text>
+<text x="786" y="1234" class="mut" text-anchor="start">trace of the original change</text>
+</g>
+<g class="node obsx" data-f="telemetry" id="am">
+<clipPath id="cl28"><rect x="1090" y="1118" width="370" height="166" rx="8"/></clipPath>
+<g clip-path="url(#cl28)"><rect x="1090" y="1118" width="370" height="166" class="cardf"/><rect x="1090" y="1118" width="370" height="42" class="hdrf"/><rect x="1090" y="1118" width="370" height="3" class="cap"/><rect x="1090" y="1159" width="370" height="1" class="hdiv"/></g>
+<rect x="1090.5" y="1118.5" width="369" height="165" rx="7.5" class="cardo"/>
+<text x="1102" y="1138" class="ttl" text-anchor="start" >Alertmanager v0.28.1</text>
+<text x="1102" y="1152" class="sub" text-anchor="start" >route · group · inhibit</text>
+<text x="1102" y="1176" class="ln" text-anchor="start">severity=page → pager webhook</text>
+<text x="1102" y="1190.5" class="ln" text-anchor="start">otherwise → ticket webhook</text>
+<text x="1102" y="1205" class="mut" text-anchor="start">(WireMock /alerts/page, /alerts/ticket)</text>
+<text x="1102" y="1219.5" class="ln" text-anchor="start">inhibit: fast window hides slow;</text>
+<text x="1102" y="1234" class="mut" text-anchor="start">payment-system breaker open hides</text>
+<text x="1102" y="1248.5" class="mut" text-anchor="start">PaymentsStuckInProcessing</text>
+</g>
+<g class="node obsx" data-f="telemetry" id="graf">
+<clipPath id="cl29"><rect x="1476" y="1118" width="356" height="166" rx="8"/></clipPath>
+<g clip-path="url(#cl29)"><rect x="1476" y="1118" width="356" height="166" class="cardf"/><rect x="1476" y="1118" width="356" height="42" class="hdrf"/><rect x="1476" y="1118" width="356" height="3" class="cap"/><rect x="1476" y="1159" width="356" height="1" class="hdiv"/></g>
+<rect x="1476.5" y="1118.5" width="355" height="165" rx="7.5" class="cardo"/>
+<text x="1488" y="1138" class="ttl" text-anchor="start" >Grafana 12.2.1</text>
+<text x="1488" y="1152" class="sub" text-anchor="start" >provisioned data sources</text>
+<text x="1488" y="1176" class="ln" text-anchor="start">Prometheus · Loki · Tempo</text>
+<text x="1488" y="1190.5" class="ln" text-anchor="start">exemplar → trace links</text>
+<text x="1488" y="1205" class="hd" text-anchor="start">RUNBOOKS · docs/runbooks</text>
+<text x="1488" y="1219.5" class="mut" text-anchor="start">CircuitBreakerOpen · OutboxLag ·</text>
+<text x="1488" y="1234" class="mut" text-anchor="start">Latency/Success budget burn ·</text>
+<text x="1488" y="1248.5" class="mut" text-anchor="start">StuckInProcessing · UnknownStatus</text>
+</g>
+<g class="node dlv">
+<clipPath id="cl30"><rect x="26" y="1370" width="362" height="178" rx="8"/></clipPath>
+<g clip-path="url(#cl30)"><rect x="26" y="1370" width="362" height="178" class="cardf"/><rect x="26" y="1370" width="362" height="42" class="hdrf"/><rect x="26" y="1370" width="362" height="3" class="cap"/><rect x="26" y="1411" width="362" height="1" class="hdiv"/></g>
+<rect x="26.5" y="1370.5" width="361" height="177" rx="7.5" class="cardo"/>
+<text x="38" y="1390" class="ttl" text-anchor="start" >Build</text>
+<text x="38" y="1404" class="sub" text-anchor="start" >Maven wrapper · Docker BuildKit</text>
+<text x="38" y="1428" class="ln" text-anchor="start">spring-boot-starter-parent <tspan class="b">4.1.1</tspan></text>
+<text x="38" y="1443" class="ln" text-anchor="start">avro-maven-plugin 1.12.2</text>
+<text x="38" y="1458" class="mut" text-anchor="start">generates event classes from .avsc</text>
+<text x="38" y="1473" class="ln" text-anchor="start">Dockerfile, two stages:</text>
+<text x="38" y="1488" class="mono" text-anchor="start">eclipse-temurin:25-jdk → 25-jre</text>
+<text x="38" y="1503" class="mut" text-anchor="start">runs as uid 1000, never root</text>
+</g>
+<g class="node dlv">
+<clipPath id="cl31"><rect x="402" y="1370" width="360" height="178" rx="8"/></clipPath>
+<g clip-path="url(#cl31)"><rect x="402" y="1370" width="360" height="178" class="cardf"/><rect x="402" y="1370" width="360" height="42" class="hdrf"/><rect x="402" y="1370" width="360" height="3" class="cap"/><rect x="402" y="1411" width="360" height="1" class="hdiv"/></g>
+<rect x="402.5" y="1370.5" width="359" height="177" rx="7.5" class="cardo"/>
+<text x="414" y="1390" class="ttl" text-anchor="start" >CI · GitHub Actions</text>
+<text x="414" y="1404" class="sub" text-anchor="start" >push to main · episode-* / bonus-* tags · PRs</text>
+<text x="414" y="1428" class="ln" text-anchor="start"><tspan class="b">verify</tspan></text>
+<text x="414" y="1443" class="mut" text-anchor="start">./mvnw -B verify (all tests, Docker)</text>
+<text x="414" y="1458" class="ln" text-anchor="start"><tspan class="b">manifests</tspan></text>
+<text x="414" y="1473" class="mut" text-anchor="start">kustomize base &amp; local → kubeconform</text>
+<text x="414" y="1488" class="mut" text-anchor="start">strict, Kubernetes 1.35.0</text>
+<text x="414" y="1503" class="ln" text-anchor="start"><tspan class="b">schema-compatibility</tspan></text>
+<text x="414" y="1518" class="mut" text-anchor="start">previous tag&#x27;s tests on new migrations</text>
+</g>
+<g class="node dlv">
+<clipPath id="cl32"><rect x="776" y="1370" width="382" height="178" rx="8"/></clipPath>
+<g clip-path="url(#cl32)"><rect x="776" y="1370" width="382" height="178" class="cardf"/><rect x="776" y="1370" width="382" height="42" class="hdrf"/><rect x="776" y="1370" width="382" height="3" class="cap"/><rect x="776" y="1411" width="382" height="1" class="hdiv"/></g>
+<rect x="776.5" y="1370.5" width="381" height="177" rx="7.5" class="cardo"/>
+<text x="788" y="1390" class="ttl" text-anchor="start" >Test strategy</text>
+<text x="788" y="1404" class="sub" text-anchor="start" >JUnit 5 · Testcontainers · WireMock</text>
+<text x="788" y="1428" class="ln" text-anchor="start">domain &amp; service tests with in-memory fakes</text>
+<text x="788" y="1443" class="ln" text-anchor="start">adapter tests: Postgres, Kafka, Apicurio</text>
+<text x="788" y="1458" class="ln" text-anchor="start"><tspan class="b">ArchUnit 1.5.1</tspan>: dependencies point inwards</text>
+<text x="788" y="1473" class="ln" text-anchor="start">Avro contract test vs released v1 schema</text>
+<text x="788" y="1488" class="ln" text-anchor="start">promtool tests for the alert rules</text>
+<text x="788" y="1503" class="mut" text-anchor="start">MultipleInstancesTest · PodLifecycleTest ·</text>
+<text x="788" y="1518" class="mut" text-anchor="start">PaymentEndToEndTest · Awaitility · OTel spans</text>
+</g>
+<g class="node dlv">
+<clipPath id="cl33"><rect x="1172" y="1370" width="340" height="178" rx="8"/></clipPath>
+<g clip-path="url(#cl33)"><rect x="1172" y="1370" width="340" height="178" class="cardf"/><rect x="1172" y="1370" width="340" height="42" class="hdrf"/><rect x="1172" y="1370" width="340" height="3" class="cap"/><rect x="1172" y="1411" width="340" height="1" class="hdiv"/></g>
+<rect x="1172.5" y="1370.5" width="339" height="177" rx="7.5" class="cardo"/>
+<text x="1184" y="1390" class="ttl" text-anchor="start" >Kubernetes · Kustomize</text>
+<text x="1184" y="1404" class="sub" text-anchor="start" >deploy/k8s/base</text>
+<text x="1184" y="1428" class="ln" text-anchor="start">Deployment: maxSurge 1, maxUnavailable 0</text>
+<text x="1184" y="1443" class="mut" text-anchor="start">500m / 1Gi, heap 75% of limit</text>
+<text x="1184" y="1458" class="mut" text-anchor="start">non-root, all capabilities dropped</text>
+<text x="1184" y="1473" class="mut" text-anchor="start">spread one pod per node</text>
+<text x="1184" y="1488" class="ln" text-anchor="start">HPA 2–4 replicas at 70% CPU</text>
+<text x="1184" y="1503" class="ln" text-anchor="start">PodDisruptionBudget minAvailable 1</text>
+<text x="1184" y="1518" class="ln" text-anchor="start">Service :8080</text>
+</g>
+<g class="node dlv">
+<clipPath id="cl34"><rect x="1526" y="1370" width="306" height="178" rx="8"/></clipPath>
+<g clip-path="url(#cl34)"><rect x="1526" y="1370" width="306" height="178" class="cardf"/><rect x="1526" y="1370" width="306" height="42" class="hdrf"/><rect x="1526" y="1370" width="306" height="3" class="cap"/><rect x="1526" y="1411" width="306" height="1" class="hdiv"/></g>
+<rect x="1526.5" y="1370.5" width="305" height="177" rx="7.5" class="cardo"/>
+<text x="1538" y="1390" class="ttl" text-anchor="start" >Local environments</text>
+<text x="1538" y="1404" class="sub" text-anchor="start" >same jar, config from env vars</text>
+<text x="1538" y="1428" class="ln" text-anchor="start"><tspan class="b">docker compose</tspan> (--profile app)</text>
+<text x="1538" y="1443" class="mut" text-anchor="start">10 services incl. the full stack</text>
+<text x="1538" y="1458" class="ln" text-anchor="start"><tspan class="b">./mvnw spring-boot:run</tspan></text>
+<text x="1538" y="1473" class="mut" text-anchor="start">spring-boot-docker-compose starts infra</text>
+<text x="1538" y="1488" class="ln" text-anchor="start"><tspan class="b">kind</tspan> 1 control plane + 2 workers</text>
+<text x="1538" y="1503" class="mut" text-anchor="start">NodePort 30080 · smoke.sh restarts</text>
+<text x="1538" y="1518" class="mut" text-anchor="start">and drains under load</text>
+</g>
+<g class="ew" data-f="create execute"><path d="M248,123 L321,123" class="edge"/>
+<circle cx="287" cy="123" r="10.5" class="nb"/>
+<text x="287" y="127" class="nbt" text-anchor="middle">1</text>
+</g>
+<g class="ew" data-f="create execute"><path d="M248,322 L273,322 Q282,322 282,313 L282,175 Q282,166 291,166 L588.5,166 Q595,166 595,159.5 L595,153" class="edge dash"/>
+<circle cx="282" cy="244" r="10.5" class="nb"/>
+<text x="282" y="248" class="nbt" text-anchor="middle">2</text>
+</g>
+<g class="ew" data-f="create execute"><path d="M1156,148 L1156,167 Q1156,176 1147,176 L569,176 Q560,176 560,185 L560,197" class="edge"/>
+<circle cx="628" cy="176" r="10.5" class="nb"/>
+<text x="628" y="180" class="nbt" text-anchor="middle">3</text>
+</g>
+<g class="ew" data-f="execute events webhooks"><path d="M248,606 L321,606" class="edge"/>
+<circle cx="287" cy="606" r="10.5" class="nb"/>
+<text x="287" y="610" class="nbt" text-anchor="middle">4</text>
+</g>
+<g class="ew" data-f="recon webhooks events"><path d="M248,800 L321,800" class="edge"/>
+<circle cx="287" cy="800" r="10.5" class="nb"/>
+<text x="287" y="804" class="nbt" text-anchor="middle">5</text>
+</g>
+<g class="ew" data-f="create execute"><path d="M572,330 L648.525,330" class="edge"/>
+<circle cx="612.763" cy="330" r="10.5" class="nb"/>
+<text x="612.763" y="334" class="nbt" text-anchor="middle">6</text>
+</g>
+<g class="ew" data-f="execute events webhooks"><path d="M572,610 L620.842,610" class="edge"/>
+<circle cx="598.921" cy="610" r="10.5" class="nb"/>
+<text x="598.921" y="614" class="nbt" text-anchor="middle">6</text>
+</g>
+<g class="ew" data-f="recon webhooks"><path d="M572,820 L662.367,820" class="edge"/>
+<circle cx="619.684" cy="820" r="10.5" class="nb"/>
+<text x="619.684" y="824" class="nbt" text-anchor="middle">6</text>
+</g>
+<g class="ew" data-f="create execute events recon webhooks"><path d="M918.542,300 L1001,300" class="edge"/>
+<circle cx="962.271" cy="300" r="10.5" class="nb"/>
+<text x="962.271" y="304" class="nbt" text-anchor="middle">7</text>
+</g>
+<g class="ew" data-f="create execute recon"><path d="M958.09,500 L1001,500" class="edge"/>
+<circle cx="982.045" cy="500" r="10.5" class="nb"/>
+<text x="982.045" y="504" class="nbt" text-anchor="middle">7</text>
+</g>
+<g class="ew" data-f="execute events"><path d="M934.362,700 L1001,700" class="edge"/>
+<circle cx="970.181" cy="700" r="10.5" class="nb"/>
+<text x="970.181" y="704" class="nbt" text-anchor="middle">7</text>
+</g>
+<g class="ew" data-f="webhooks"><path d="M902.328,862 L1001,862" class="edge"/>
+<circle cx="954.164" cy="862" r="10.5" class="nb"/>
+<text x="954.164" y="866" class="nbt" text-anchor="middle">7</text>
+</g>
+<g class="ew" data-f="create execute events recon webhooks"><path d="M1240,300 L1315,300" class="edge"/>
+<circle cx="1280" cy="300" r="10.5" class="nb"/>
+<text x="1280" y="304" class="nbt" text-anchor="middle">8</text>
+</g>
+<g class="ew" data-f="create execute recon"><path d="M1240,470 L1315,470" class="edge"/>
+<circle cx="1280" cy="470" r="10.5" class="nb"/>
+<text x="1280" y="474" class="nbt" text-anchor="middle">9</text>
+</g>
+<g class="ew" data-f="execute events"><path d="M1240,680 L1315,680" class="edge"/>
+<circle cx="1280" cy="680" r="10.5" class="nb"/>
+<text x="1280" y="684" class="nbt" text-anchor="middle">10</text>
+</g>
+<g class="ew" data-f="events"><path d="M1240,776 L1315,776" class="edge"/>
+<circle cx="1280" cy="776" r="10.5" class="nb"/>
+<text x="1280" y="780" class="nbt" text-anchor="middle">11</text>
+</g>
+<g class="ew" data-f="webhooks"><path d="M1240,900 L1315,900" class="edge"/>
+<circle cx="1280" cy="900" r="10.5" class="nb"/>
+<text x="1280" y="904" class="nbt" text-anchor="middle">12</text>
+</g>
+<g class="ew" data-f="telemetry"><path d="M370,1118 L370,1033" class="edge"/>
+<circle cx="370" cy="1073" r="10.5" class="nb"/>
+<text x="370" y="1077" class="nbt" text-anchor="middle">13</text>
+</g>
+<g class="ew" data-f="telemetry"><path d="M630,1028 L630,1113" class="edge"/>
+<circle cx="630" cy="1073" r="10.5" class="nb"/>
+<text x="630" y="1077" class="nbt" text-anchor="middle">14</text>
+</g>
+<g class="ew" data-f="telemetry"><path d="M910,1028 L910,1113" class="edge"/>
+<circle cx="910" cy="1073" r="10.5" class="nb"/>
+<text x="910" y="1077" class="nbt" text-anchor="middle">15</text>
+</g>
+<g class="ew" data-f="telemetry"><path d="M204,1284 L204,1292 Q204,1300 212,1300 L1244.5,1300 Q1250,1300 1250,1294.5 L1250,1289" class="edge"/>
+<circle cx="950" cy="1300" r="10.5" class="nb"/>
+<text x="950" y="1304" class="nbt" text-anchor="middle">16</text>
+</g>
+<g class="ew" data-f="telemetry"><path d="M613,1284 L613,1300" class="edge noarr"/>
+</g>
+<rect x="14.5" y="1594.5" width="1831" height="149" rx="12" class="zone"/>
+<text x="28" y="1585" class="zl" text-anchor="start" >CONNECTIONS  ·  numbered on the drawing</text>
+<g class="ew" data-f="create execute">
+<circle cx="50" cy="1626" r="10.5" class="nb"/>
+<text x="50" y="1630" class="nbt" text-anchor="middle">1</text>
+<text x="70" y="1630" class="lg" text-anchor="start" >HTTPS request: Bearer JWT, Idempotency-Key, X-Correlation-Id</text>
+</g>
+<g class="ew" data-f="create execute">
+<circle cx="50" cy="1656" r="10.5" class="nb"/>
+<text x="50" y="1660" class="nbt" text-anchor="middle">2</text>
+<text x="70" y="1660" class="lg" text-anchor="start" >Token keys: issuer-uri → JWKS in production, HS256 key locally</text>
+</g>
+<g class="ew" data-f="create execute">
+<circle cx="50" cy="1686" r="10.5" class="nb"/>
+<text x="50" y="1690" class="nbt" text-anchor="middle">3</text>
+<text x="70" y="1690" class="lg" text-anchor="start" >Filter chain (left to right) hands over to the controllers</text>
+</g>
+<g class="ew" data-f="execute events webhooks">
+<circle cx="50" cy="1716" r="10.5" class="nb"/>
+<text x="50" y="1720" class="nbt" text-anchor="middle">4</text>
+<text x="70" y="1720" class="lg" text-anchor="start" >Records to listeners; retries 5s/10s/20s, then dead-letter topic</text>
+</g>
+<g class="ew" data-f="recon webhooks events">
+<circle cx="502" cy="1626" r="10.5" class="nb"/>
+<text x="502" y="1630" class="nbt" text-anchor="middle">5</text>
+<text x="522" y="1630" class="lg" text-anchor="start" >@Scheduled triggers; ShedLock lets one replica reconcile</text>
+</g>
+<g class="ew" data-f="create execute events recon webhooks">
+<circle cx="502" cy="1656" r="10.5" class="nb"/>
+<text x="502" y="1660" class="nbt" text-anchor="middle">6</text>
+<text x="522" y="1660" class="lg" text-anchor="start" >Adapter invokes a use case through a primary port</text>
+</g>
+<g class="ew" data-f="create execute events recon webhooks">
+<circle cx="502" cy="1686" r="10.5" class="nb"/>
+<text x="502" y="1690" class="nbt" text-anchor="middle">7</text>
+<text x="522" y="1690" class="lg" text-anchor="start" >Core calls a secondary port; the adapter implements it</text>
+</g>
+<g class="ew" data-f="create execute events recon webhooks">
+<circle cx="502" cy="1716" r="10.5" class="nb"/>
+<text x="502" y="1720" class="nbt" text-anchor="middle">8</text>
+<text x="522" y="1720" class="lg" text-anchor="start" >JDBC via HikariCP: JPA, Flyway, ShedLock, Bucket4j</text>
+</g>
+<g class="ew" data-f="create execute recon">
+<circle cx="954" cy="1626" r="10.5" class="nb"/>
+<text x="954" y="1630" class="nbt" text-anchor="middle">9</text>
+<text x="974" y="1630" class="lg" text-anchor="start" >HTTP/JSON with deadlines, circuit breaker, retry on queries only</text>
+</g>
+<g class="ew" data-f="execute events">
+<circle cx="954" cy="1656" r="10.5" class="nb"/>
+<text x="954" y="1660" class="nbt" text-anchor="middle">10</text>
+<text x="974" y="1660" class="lg" text-anchor="start" >Produce JSON / Avro, waiting for the broker&#x27;s ack (≤ 5s)</text>
+</g>
+<g class="ew" data-f="events">
+<circle cx="954" cy="1686" r="10.5" class="nb"/>
+<text x="954" y="1690" class="nbt" text-anchor="middle">11</text>
+<text x="974" y="1690" class="lg" text-anchor="start" >Register and look up the PaymentEvent schema</text>
+</g>
+<g class="ew" data-f="webhooks">
+<circle cx="954" cy="1716" r="10.5" class="nb"/>
+<text x="954" y="1720" class="nbt" text-anchor="middle">12</text>
+<text x="974" y="1720" class="lg" text-anchor="start" >Signed HTTPS POST, no redirects, 15s deadline</text>
+</g>
+<g class="ew" data-f="telemetry">
+<circle cx="1406" cy="1626" r="10.5" class="nb"/>
+<text x="1406" y="1630" class="nbt" text-anchor="middle">13</text>
+<text x="1426" y="1630" class="lg" text-anchor="start" >Prometheus scrapes /actuator/prometheus every 5s</text>
+</g>
+<g class="ew" data-f="telemetry">
+<circle cx="1406" cy="1656" r="10.5" class="nb"/>
+<text x="1406" y="1660" class="nbt" text-anchor="middle">14</text>
+<text x="1426" y="1660" class="lg" text-anchor="start" >Log records over OTLP/HTTP to Loki :3100</text>
+</g>
+<g class="ew" data-f="telemetry">
+<circle cx="1406" cy="1686" r="10.5" class="nb"/>
+<text x="1406" y="1690" class="nbt" text-anchor="middle">15</text>
+<text x="1426" y="1690" class="lg" text-anchor="start" >Spans over OTLP/HTTP to Tempo :4318</text>
+</g>
+<g class="ew" data-f="telemetry">
+<circle cx="1406" cy="1716" r="10.5" class="nb"/>
+<text x="1406" y="1720" class="nbt" text-anchor="middle">16</text>
+<text x="1426" y="1720" class="lg" text-anchor="start" >Firing alerts from Prometheus rules and the Loki ruler</text>
+</g>
+</svg></div>
+  <figcaption>Dependencies point inwards: callers and primary adapters on the left drive the application core through its use cases; the core reaches PostgreSQL, Kafka, the registry, the bank's systems and merchants only through the ports it owns, implemented by the secondary adapters on the right. Kafka is both an output and an input, so its consumers loop back to the left under the pod.</figcaption>
+</figure>
+<section class="inv">
+  <h2>Technology inventory</h2>
+  <p>Every library, tool and image the repository declares, with the version pinned in <code>pom.xml</code>, <code>docker-compose.yml</code>, the Kubernetes manifests or the CI workflow.</p>
+  <div class="ig-wrap"><div class="ig"><h3>Runtime</h3><ul><li>Java 25 · Eclipse Temurin</li><li>Spring Boot 4.1.1</li><li>Spring MVC on Tomcat</li><li>Jakarta Bean Validation</li><li>Jackson</li><li>Spring Boot Actuator</li></ul></div><div class="ig"><h3>Architecture</h3><ul><li>Hexagonal · ports &amp; adapters</li><li>Command / query split</li><li>Rich domain, state machine</li><li>ArchUnit 1.5.1 (8 rules)</li><li>Transactional outbox</li><li>Read-model projection</li></ul></div><div class="ig"><h3>Data</h3><ul><li>PostgreSQL 18</li><li>Spring Data JPA · Hibernate</li><li>HikariCP</li><li>Flyway (12 migrations)</li><li>ShedLock 7.10.1 (JDBC)</li><li>Bucket4j 8.21.0 (PostgreSQL)</li></ul></div><div class="ig"><h3>Messaging</h3><ul><li>Apache Kafka 4.1.1 · KRaft</li><li>Spring for Apache Kafka</li><li>Retry topics + DLT</li><li>Apache Avro 1.12.2</li><li>Apicurio Registry 3.3.3 + serde</li></ul></div><div class="ig"><h3>Integration &amp; resilience</h3><ul><li>Spring Cloud OpenFeign 2025.1.3</li><li>feign-micrometer</li><li>Resilience4j 2.4.0</li><li>Apache HttpClient 5</li><li>WireMock 3.13.2</li></ul></div><div class="ig"><h3>Security</h3><ul><li>OAuth2 resource server (JWT)</li><li>Nimbus HS256 for local profile</li><li>Per-customer rate limits</li><li>HMAC-SHA256 webhook signatures</li><li>SSRF guard on webhooks</li><li>Non-root image, no capabilities</li></ul></div><div class="ig"><h3>API</h3><ul><li>REST + RFC 9457 problem details</li><li>Idempotency-Key</li><li>springdoc-openapi 3.1.1</li><li>Swagger UI</li></ul></div><div class="ig"><h3>Observability</h3><ul><li>Micrometer + Prometheus registry</li><li>Micrometer Tracing → OpenTelemetry</li><li>OTel Logback appender 2.28.1-alpha</li><li>ECS structured logs</li><li>Prometheus v3.7.3</li><li>Loki 3.5.7</li><li>Tempo 2.9.0</li><li>Alertmanager v0.28.1</li><li>Grafana 12.2.1</li></ul></div><div class="ig"><h3>Testing</h3><ul><li>JUnit 5</li><li>Testcontainers (PostgreSQL, Kafka, Apicurio, promtool)</li><li>WireMock</li><li>Awaitility</li><li>spring-security-test</li><li>OTel InMemorySpanExporter</li></ul></div><div class="ig"><h3>Build &amp; delivery</h3><ul><li>Maven wrapper</li><li>avro-maven-plugin</li><li>Docker multi-stage (BuildKit)</li><li>Docker Compose + spring-boot-docker-compose</li><li>Kubernetes + Kustomize</li><li>kind</li><li>kubeconform 0.8.0</li><li>GitHub Actions</li></ul></div></div>
+  <p class="note">Marked shortcuts in the code that the diagram reflects: one rate-limit tier for every customer; the relay auto-registers its schema; an open breaker on execution is reported as UNKNOWN; <code>payment-events</code> grows without a snapshot. Every topic has one partition, so each consumer group is served by one pod whatever the replica count; the HPA scales on CPU for the HTTP side.</p>
+</section>
+</div>
+<script>
+(function () {
+  const svg = document.getElementById('dg');
+  const btns = [...document.querySelectorAll('.fb')];
+  const panels = [...document.querySelectorAll('.steps')];
+  function show(f) {
+    btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.flow === f)));
+    panels.forEach(p => { p.hidden = p.dataset.flow !== f; });
+    svg.classList.toggle('focus', f !== 'all');
+    const c = f === 'all' ? '' : 'var(--f-' + f + ')';
+    svg.style.setProperty('--flowc', c);
+    panels.forEach(p => p.style.setProperty('--flowc', c));
+    svg.querySelectorAll('[data-f]').forEach(el => {
+      el.classList.toggle('on', f !== 'all' && el.dataset.f.split(' ').includes(f));
+    });
+    try { localStorage.setItem('jps-flow', f); } catch (e) {}
+  }
+  btns.forEach(b => b.addEventListener('click', () => show(b.dataset.flow)));
+  const fit = document.getElementById('fit');
+  fit.addEventListener('click', () => {
+    const on = document.getElementById('sc').classList.toggle('fit');
+    fit.setAttribute('aria-pressed', String(on));
+    fit.textContent = on ? 'Actual size' : 'Fit to width';
+  });
+  let start = 'all';
+  const h = location.hash.slice(1);
+  if (btns.some(b => b.dataset.flow === h)) start = h;
+  else { try { const s = localStorage.getItem('jps-flow'); if (s && btns.some(b => b.dataset.flow === s)) start = s; } catch (e) {} }
+  show(start);
+})();
+</script>
+</body>
+</html>
