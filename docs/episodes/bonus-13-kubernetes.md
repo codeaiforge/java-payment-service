@@ -294,6 +294,38 @@ safe.
   pod keeps answering. It can't protect against a node that dies; only the
   replica count does that.
 
+One rolling-update step, both pods together. The new pod takes traffic
+before the old one is told to stop, and the old one keeps answering until
+nobody routes to it:
+
+```mermaid
+%%{init: {"sequence": {"mirrorActors": false}}}%%
+sequenceDiagram
+    participant D as Deployment controller
+    participant N as New pod
+    participant E as Service endpoints
+    participant O as Old pod
+    participant C as Clients
+
+    D->>N: create (maxSurge 1: one extra pod)
+    Note over D,E: new pod: Flyway, Spring start-up, startupProbe passes
+    N->>E: readiness UP: added
+    C->>N: some requests now go here
+    D->>O: delete (maxUnavailable 0: only now)
+    par at the same time
+        Note over D,E: old pod leaves the endpoints, every node learns it within seconds
+    and
+        rect rgba(22, 163, 74, 0.12)
+        Note over O,C: preStop: sleep 10s, still serving
+        C->>O: requests routed before the change arrive, and are answered
+        end
+    end
+    Note over O,C: t=10s SIGTERM: no new connections, requests in hand finish
+    O-->>C: last responses
+    Note over O,C: listeners, schedulers, pools stop. JVM exits (SIGKILL at 60s)
+    C->>N: all traffic on the new pod
+```
+
 ## Rolling updates and migrations
 
 ### Flyway at start-up, not as a Job

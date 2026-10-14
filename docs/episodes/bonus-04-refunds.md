@@ -160,6 +160,34 @@ of that payment has in common. B waits at that line until A commits, then
 reads A's `PROCESSING` refund, and the policy refuses. Refunds of *other*
 payments don't wait at all.
 
+The same two requests with the lock:
+
+```mermaid
+%%{init: {"sequence": {"mirrorActors": false}}}%%
+sequenceDiagram
+    participant A as Refund request A (150)
+    participant DB as PostgreSQL
+    participant B as Refund request B (150)
+
+    Note over A,B: payment of 250, COMPLETED, nothing refunded yet
+    A->>DB: SELECT payment … FOR UPDATE
+    DB-->>A: locked
+    B->>DB: SELECT payment … FOR UPDATE
+    rect rgba(100, 116, 139, 0.15)
+    Note over B: waits: A holds the row lock
+    A->>DB: SELECT refunds → none, 250 left
+    Note over A: RefundPolicy: 150 ≤ 250, ok
+    A->>DB: INSERT refund 150 PROCESSING
+    A->>DB: commit: lock released
+    end
+    Note over A: then calls the payment system, without the lock
+    DB-->>B: locked
+    B->>DB: SELECT refunds → A's 150, 100 left
+    Note over B: RefundPolicy: 150 > 100, refused
+    B->>DB: rollback: nothing stored
+    Note over B: 422: more than is left to refund
+```
+
 The lock is held only for step 1: a few reads and two inserts. It's never
 held across the payment system call. `PaymentTransactionsTest` shows the race
 on real PostgreSQL: two concurrent refunds of 150 on a 250 payment, and

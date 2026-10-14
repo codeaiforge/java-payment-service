@@ -172,6 +172,35 @@ case UNKNOWN -> {
 The payment stays `PROCESSING`, and `POST /execute` returns `200` with
 `"status": "PROCESSING"`.
 
+The whole call, with the two cases we can't tell apart:
+
+```mermaid
+%%{init: {"sequence": {"mirrorActors": false}}}%%
+sequenceDiagram
+    participant C as Client
+    participant S as ExecutePaymentService
+    participant DB as PostgreSQL
+    participant PS as Payment system
+
+    C->>S: POST /payments/{id}/execute
+    S->>DB: commit AUTHORIZED → PROCESSING
+    Note over S,PS: committed before the call: PROCESSING means "we may have sent this"
+    alt the order never arrives
+        S-xPS: POST /payment-orders, Idempotency-Key: payment ID
+    else the money moves, the answer is lost
+        S->>PS: POST /payment-orders, Idempotency-Key: payment ID
+        PS->>PS: money moves
+        PS--xS: SETTLED, lost on the way back
+    end
+    rect rgba(217, 119, 6, 0.15)
+    Note over S,PS: 5 s read timeout. From here the two cases look the same: outcome UNKNOWN
+    Note over S,PS: no retry, not FAILED, not COMPLETED: the payment stays PROCESSING
+    end
+    S-->>C: 200, "status": "PROCESSING"
+    C->>S: POST /payments/{id}/execute again
+    S-->>C: 409: the domain refuses PROCESSING → PROCESSING, nothing is sent twice
+```
+
 ### Connecting it to earlier episodes
 
 This is where earlier episodes come together.

@@ -105,6 +105,34 @@ row 2 isn't a candidate for anyone. Relay B doesn't skip it because it's
 locked; the query never returns it. Once A commits row 1 as published, row 2
 becomes the oldest and the next run picks it up.
 
+Both rules in one run, with two relays and three unpublished rows:
+
+```mermaid
+%%{init: {"sequence": {"mirrorActors": false}}}%%
+sequenceDiagram
+    participant K as Kafka
+    participant A as Relay on instance A
+    participant DB as payment_outbox
+    participant B as Relay on instance B
+
+    Note over A,B: unpublished: 1 X PAYMENT_COMPLETED · 2 X REFUND_COMPLETED · 3 Y PAYMENT_COMPLETED
+    A->>DB: BEGIN, claim … FOR UPDATE SKIP LOCKED
+    DB-->>A: rows 1 and 3 (row 2 has an earlier unpublished row of X)
+    B->>DB: BEGIN, claim … FOR UPDATE SKIP LOCKED
+    DB-->>B: nothing: 1 and 3 are locked, 2 still waits for 1
+    B->>DB: COMMIT, nothing to send
+    rect rgba(37, 99, 235, 0.12)
+    A->>K: send row 1 (X), wait for the ack
+    A->>K: send row 3 (Y), wait for the ack
+    A->>DB: mark 1 and 3 published, COMMIT, locks released
+    end
+    Note over A,B: next run, one second later: row 2 is now the oldest of X
+    B->>DB: BEGIN, claim … FOR UPDATE SKIP LOCKED
+    DB-->>B: row 2
+    B->>K: send row 2 (X), after row 1
+    B->>DB: mark 2 published, COMMIT
+```
+
 Within one batch the old rule (stop at the first failed send) kept the order.
 Across relays only this rule does. `MultipleInstancesTest` shows both halves:
 with only `SKIP LOCKED`, its ordering test fails, and with neither, the

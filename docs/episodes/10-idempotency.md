@@ -177,6 +177,42 @@ answers `409 Conflict`: retry in a moment, and you'll get the payment.
 That's also why `idempotency_key.payment_id` has no foreign key to `payment`:
 for a short time the claim exists without the payment.
 
+Both together, for two requests with the same key that arrive at the same moment:
+
+```mermaid
+%%{init: {"sequence": {"mirrorActors": false}}}%%
+sequenceDiagram
+    participant CA as Client A
+    participant A as CreatePaymentService<br/>(request A)
+    participant DB as PostgreSQL
+    participant B as CreatePaymentService<br/>(request B)
+    participant CB as Client B
+
+    CA->>A: POST /payments, key K
+    CB->>B: POST /payments, key K
+    A->>DB: find(K)
+    DB-->>A: nothing
+    B->>DB: find(K)
+    DB-->>B: nothing
+    Note over A,B: both validate: neither knows about the other
+    rect rgba(37, 99, 235, 0.12)
+    Note over A,B: the claim: one SQL statement, PostgreSQL picks the winner
+    A->>DB: claim K for P1<br/>INSERT … ON CONFLICT DO NOTHING
+    DB-->>A: 1 row: A wins
+    B->>DB: claim K for P2<br/>INSERT … ON CONFLICT DO NOTHING
+    DB-->>B: 0 rows: B lost, P2 is never saved
+    end
+    B->>DB: find(K)
+    DB-->>B: K → P1, not saved yet
+    B-->>CB: 409 Conflict, retry in a moment
+    A->>DB: save P1
+    A-->>CA: 201, P1
+    CB->>B: retry, key K
+    B->>DB: find(K)
+    DB-->>B: K → P1
+    B-->>CB: 201, P1: the same payment
+```
+
 ### `422` for a reused key
 
 | Situation | HTTP |
