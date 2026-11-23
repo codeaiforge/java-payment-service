@@ -649,3 +649,8 @@ Content-Type: application/json
 ### Operator scope — a customer token on /operations/** -> 403
 GET {{baseUrl}}/operations/reconciliation
 Authorization: Bearer {{token}}
+
+### Operator — settle one PROCESSING payment now -> 200 {answer, status, stored}; not PROCESSING -> 409
+# Use the id of a payment created with "TIMEOUT" in its reference and executed: its answer was lost.
+POST {{baseUrl}}/operations/payments/00000000-0000-0000-0000-000000000000/reconcile
+Authorization: Bearer {{operatorToken}}

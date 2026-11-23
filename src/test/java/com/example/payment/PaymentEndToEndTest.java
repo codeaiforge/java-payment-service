@@ -270,19 +270,28 @@ class PaymentEndToEndTest {
 
 	@Test
 	void operationsNeedTheOperateScope() throws Exception {
-		mockMvc.perform(get("/operations/anything").with(customer()))
+		mockMvc.perform(post("/operations/payments/{id}/reconcile", UUID.randomUUID()).with(customer()))
 				.andExpect(status().isForbidden());
 	}
 
 	// A real token, so the scope claim is mapped to SCOPE_payments.operate as an identity provider's would be.
-	// Past security there is no endpoint yet: 404, not 401 or 403.
+	// The payment is seconds old, far below the 2m threshold: the scheduled run won't touch it yet, the operator can.
 	@Test
-	void anOperatorTokenPassesSecurityOnOperations() throws Exception {
+	void anOperatorSettlesAPaymentWhoseAnswerWasLost() throws Exception {
+		String paymentId = createPayment("TIMEOUT reconciled by an operator");
+		execute(paymentId);
+		awaitStatus(paymentId, "PROCESSING");
 		String operator = signedToken(localJwtSecret,
 				new JWTClaimsSet.Builder().subject("OPS-0001").claim("scope", "payments.operate").build());
 
-		mockMvc.perform(get("/operations/anything").header("Authorization", "Bearer " + operator))
-				.andExpect(status().isNotFound());
+		mockMvc.perform(post("/operations/payments/{id}/reconcile", paymentId).header("Authorization", "Bearer " + operator))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.answer").value("EXECUTED"))
+				.andExpect(jsonPath("$.status").value("COMPLETED"))
+				.andExpect(jsonPath("$.stored").value(true));
+		assertThat(storedStatus(paymentId)).isEqualTo("COMPLETED");
+		// Asked, never sent again.
+		externalSystems.verify(1, postRequestedFor(urlEqualTo("/payment-orders")).withHeader("Idempotency-Key", equalTo(paymentId)));
 	}
 
 	@Test

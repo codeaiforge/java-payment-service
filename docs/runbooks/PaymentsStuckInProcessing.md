@@ -13,7 +13,10 @@ customer doesn't know the outcome.
    `lock_until` says when it expires.
 2. **What does it hear back?** `sum by (result) (rate(payments_reconciled_total[10m]))`. Only `unknown`: the payment
    system isn't answering the question either. Loki: `{service_name="payment-service"} |= "not reconciled"`.
-3. **Which payments?** Ask the payment system's owners about the oldest, by payment ID (it is the idempotency key).
+3. **Which payments?** Find the oldest, then settle it now: `POST /operations/payments/{id}/reconcile` with an
+   operator token (scope `payments.operate`). The answer says what the payment system said and whether the payment
+   moved. `UNKNOWN`: the payment system has no answer either, so ask its owners about it by payment ID (it is the
+   idempotency key).
    ```sql
    SELECT id, status_changed_at FROM payment WHERE status = 'PROCESSING' ORDER BY status_changed_at;
    ```

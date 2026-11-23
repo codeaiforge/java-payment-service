@@ -220,6 +220,25 @@ src/main/java/com/example/payment/
 The domain is unchanged: `complete()` and `fail()` from `PROCESSING` have
 existed since Episode 09.
 
+## Later addition: reconcile one payment now
+
+After bonus 13, an operator can settle one payment by id instead of waiting
+for the next run: `POST /operations/payments/{id}/reconcile`, with the
+`payments.operate` scope (bonus 01). It asks the same question and stores the
+answer the same way, with its audit record, event and metrics, and the
+compare-and-set still decides who stores it. The answer is `200` with what the
+payment system said, the stored status, and whether this call changed it. A
+payment that isn't `PROCESSING` is `409`.
+
+The operator may ask before the threshold, because `EXECUTED` and
+`REJECTED` are final whenever they come. `NOT_RECEIVED` is not, for the
+reason above: the threshold is what gives a slow order time to arrive. So a
+payment younger than the threshold that is not received yet stays
+`PROCESSING`, and the scheduled run settles it.
+
+Both paths live in `ReconcilePaymentsService`, which implements both use
+cases. The log names the operator who asked.
+
 ## Known shortcuts
 
 - **No lock between instances.** Two schedulers may ask about the same
