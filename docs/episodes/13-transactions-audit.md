@@ -140,7 +140,8 @@ execute or cancel already got.
   the episode's examples do. A `null -> CREATED` row is one line in
   `CreatePaymentService` if it's wanted.
 - **Nothing reads the audit yet.** No endpoint, no query port. Add one when
-  something needs it; until then, `psql` (below).
+  something needs it; until then, `psql` (below). Added later: see
+  "Later addition: reading the trail".
 - **Payments stuck in `PROCESSING` are not reconciled.** That needs the
   payment system to answer "what happened to this one?". Episode 16
   (resilience) deals with failing external calls; Episode 17 (asynchronous
@@ -150,6 +151,20 @@ execute or cancel already got.
   harmless; sending twice isn't, and can't happen.
 - **`IdempotencyKeyInProgressException` is now unreachable** in practice: a
   claim is never visible without its payment. It stays as a `409` guard.
+
+## Later addition: reading the trail
+
+After bonus 13, the trail can be read without SQL: `GET /payments/{id}/history`
+lists the payment's status changes, `from`, `to` and `at`, oldest first. The
+same rule as `GET /payments/{id}` applies: anyone but the source account's
+holder gets the same `404`.
+
+It reads through a port of its own, `AuditQueryPort`, so `AuditPort` stays
+write-only: the services that change a status can't read the trail back.
+Rows come back in insert order (`id`), not by `occurred_at`, which is each
+instance's clock. A new index on `payment_id` keeps the read off a full scan.
+The history starts at the first change: a payment still `CREATED` has none.
+Refunds have their own trail (`refund_audit`) and aren't in it.
 
 ## Try it
 

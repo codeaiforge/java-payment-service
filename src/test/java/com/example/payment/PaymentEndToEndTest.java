@@ -94,6 +94,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.startsWith;
@@ -340,6 +341,33 @@ class PaymentEndToEndTest {
 		await().during(Duration.ofMillis(500)).untilAsserted(() -> assertThat(storedStatus(paymentId)).isEqualTo("CREATED"));
 	}
 
+	// The audit trail, read back without SQL, in the order it was written.
+	@Test
+	void theHolderReadsWhatHappenedToTheirPayment() throws Exception {
+		String paymentId = completedPayment("History");
+
+		mockMvc.perform(get("/payments/{id}/history", paymentId).with(customer()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].to").value(contains("AUTHORIZED", "PROCESSING", "COMPLETED")))
+				.andExpect(jsonPath("$[0].from").value("CREATED"))
+				.andExpect(jsonPath("$[0].at").exists());
+	}
+
+	// Exactly what GET /payments/{id} answers another customer, compared rather than assumed.
+	@Test
+	void anotherCustomersHistoryIsTheSame404AsTheirPayment() throws Exception {
+		String paymentId = completedPayment("Someone else's history");
+
+		String payment = mockMvc.perform(get("/payments/{id}", paymentId).with(otherCustomer()))
+				.andExpect(status().isNotFound())
+				.andReturn().getResponse().getContentAsString();
+		String history = mockMvc.perform(get("/payments/{id}/history", paymentId).with(otherCustomer()))
+				.andExpect(status().isNotFound())
+				.andReturn().getResponse().getContentAsString();
+
+		assertThat(history).isEqualTo(payment.replace("/payments/" + paymentId, "/payments/" + paymentId + "/history"));
+	}
+
 	@Test
 	void createsAndStoresPayment() throws Exception {
 		String response = mockMvc.perform(post("/payments").header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""
@@ -396,7 +424,8 @@ class PaymentEndToEndTest {
 				.andExpect(jsonPath("$.paths['/payments'].post").exists())
 				.andExpect(jsonPath("$.paths['/payments/{paymentId}'].get").exists())
 				.andExpect(jsonPath("$.paths['/payments/{paymentId}/execute'].post").exists())
-				.andExpect(jsonPath("$.paths['/payments/{paymentId}/cancel'].post").exists());
+				.andExpect(jsonPath("$.paths['/payments/{paymentId}/cancel'].post").exists())
+				.andExpect(jsonPath("$.paths['/payments/{paymentId}/history'].get").exists());
 	}
 
 	@Test

@@ -654,3 +654,7 @@ Authorization: Bearer {{token}}
 # Use the id of a payment created with "TIMEOUT" in its reference and executed: its answer was lost.
 POST {{baseUrl}}/operations/payments/00000000-0000-0000-0000-000000000000/reconcile
 Authorization: Bearer {{operatorToken}}
+
+### Payment history — what happened to it, oldest first -> 200 [{from, to, at}]; another customer -> 404
+GET {{baseUrl}}/payments/{{refundPaymentId}}/history
+Authorization: Bearer {{token}}

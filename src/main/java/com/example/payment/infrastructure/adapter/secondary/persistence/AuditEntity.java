@@ -41,4 +41,16 @@ class AuditEntity {
 		this.toStatus = toStatus;
 		this.occurredAt = occurredAt;
 	}
+
+	String getFromStatus() {
+		return fromStatus;
+	}
+
+	String getToStatus() {
+		return toStatus;
+	}
+
+	Instant getOccurredAt() {
+		return occurredAt;
+	}
 }
