@@ -37,6 +37,18 @@ class ArchitectureTest {
 			.whereLayer("Application").mayOnlyBeAccessedByLayers("Infrastructure", "Config")
 			.whereLayer("Domain").mayOnlyBeAccessedByLayers("Application", "Infrastructure", "Config");
 
+	// A driving adapter (web, messaging, scheduling, and any later one) reaches the application only through primary
+	// ports, with their commands, results and exceptions: never a secondary port, a service, a validator or a
+	// secondary adapter. The layered rule above can't say this: to it, every adapter may see the whole application.
+	@ArchTest
+	static final ArchRule primaryAdaptersUsePrimaryPortsOnly = noClasses()
+			.that().resideInAPackage("com.example.payment.infrastructure.adapter.primary..")
+			.should().dependOnClassesThat().resideInAnyPackage(
+					"com.example.payment.application.port.secondary..",
+					"com.example.payment.application.service..",
+					"com.example.payment.application.validation..",
+					"com.example.payment.infrastructure.adapter.secondary..");
+
 	@ArchTest
 	static final ArchRule domainDoesNotDependOnFrameworks = noClasses()
 			.that().resideInAPackage(DOMAIN)

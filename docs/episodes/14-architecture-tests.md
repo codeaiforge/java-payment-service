@@ -90,6 +90,14 @@ cross them.
 - **No rules for `messaging` yet.** That package doesn't exist until
   Episode 17.
 
+## Later addition
+
+After bonus 13, one more rule: **primary adapters use primary ports only.**
+Web, messaging and scheduling reach the application through `port.primary`,
+its commands, results and exceptions, never a secondary port, a service, a
+validator or a secondary adapter. They already did; now the build says so.
+The layered rule can't: to it, any adapter may see the whole application.
+
 ## Try it
 
 Make the domain import Spring:
