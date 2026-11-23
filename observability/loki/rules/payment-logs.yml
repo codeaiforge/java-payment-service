@@ -12,4 +12,4 @@ groups:
         labels: {service: payment-service, severity: ticket}
         annotations:
           summary: The payment system is answering with a status this service doesn't recognize.
-          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/UnknownPaymentSystemStatus.md
+          runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/UnknownPaymentSystemStatus.md

@@ -1,6 +1,6 @@
 # Java Payment Service
 
-[![CI](https://github.com/dsofianos78/java-payment-service/actions/workflows/ci.yml/badge.svg)](https://github.com/dsofianos78/java-payment-service/actions/workflows/ci.yml)
+[![CI](https://github.com/codeaiforge/java-payment-service/actions/workflows/ci.yml/badge.svg)](https://github.com/codeaiforge/java-payment-service/actions/workflows/ci.yml)
 ![Java 25](https://img.shields.io/badge/Java-25-blue)
 ![Spring Boot 4.1](https://img.shields.io/badge/Spring%20Boot-4.1-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -293,9 +293,9 @@ Built by Dimitrios Sofianos ([CodeAIForge](https://www.codeaiforge.com/)) as a w
 example of how a payment service's architecture follows from its requirements.
 
 Questions and feedback are welcome in
-[GitHub Discussions](https://github.com/dsofianos78/java-payment-service/discussions).
+[GitHub Discussions](https://github.com/codeaiforge/java-payment-service/discussions).
 Found a bug, or a claim in an episode that isn't true? Open an
-[issue](https://github.com/dsofianos78/java-payment-service/issues).
+[issue](https://github.com/codeaiforge/java-payment-service/issues).
 
 ## License
 

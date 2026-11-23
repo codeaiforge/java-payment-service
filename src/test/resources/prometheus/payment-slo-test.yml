@@ -66,11 +66,11 @@ tests:
           - exp_labels: {service: payment-service, slo: success, severity: page, window: fast}
             exp_annotations:
               summary: "Payment executions are failing for technical reasons; the monthly error budget will be gone in about 2 days."
-              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+              runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
           - exp_labels: {service: payment-service, slo: success, severity: ticket, window: slow}
             exp_annotations:
               summary: "Payment executions are failing for technical reasons; the monthly error budget will be gone in about 5 days."
-              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+              runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
       - {eval_time: 1h, alertname: PaymentLatencyBudgetBurn, exp_alerts: []}
       # Not yet: the breaker must stay open for 5 minutes, plus the minute it is looked at over.
       - {eval_time: 4m, alertname: CircuitBreakerOpen, exp_alerts: []}
@@ -80,14 +80,14 @@ tests:
           - exp_labels: {service: payment-service, severity: ticket, name: payment-system}
             exp_annotations:
               summary: "The payment-system circuit breaker has not closed for 5 minutes: calls to it fail at once."
-              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/CircuitBreakerOpen.md
+              runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/CircuitBreakerOpen.md
       - eval_time: 1h
         alertname: PaymentsStuckInProcessing
         exp_alerts:
           - exp_labels: {service: payment-service, severity: ticket}
             exp_annotations:
               summary: "A payment has been PROCESSING for over 7 minutes; reconciliation is not settling it."
-              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentsStuckInProcessing.md
+              runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentsStuckInProcessing.md
 
   # A slow leak: 4% errors for six hours. Too slow to page (14.4x would be 7.2%), but the budget is going: a ticket.
   - name: slow leak
@@ -104,7 +104,7 @@ tests:
           - exp_labels: {service: payment-service, slo: success, severity: ticket, window: slow}
             exp_annotations:
               summary: "Payment executions are failing for technical reasons; the monthly error budget will be gone in about 5 days."
-              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+              runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
 
   # 30% of POST /payments slower than 500ms (the account system is slow, say).
   - name: slow payment creation
@@ -121,11 +121,11 @@ tests:
           - exp_labels: {service: payment-service, slo: latency, severity: page, window: fast}
             exp_annotations:
               summary: "POST /payments is slower than 500ms too often; the monthly error budget will be gone in about 2 days."
-              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
+              runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
           - exp_labels: {service: payment-service, slo: latency, severity: ticket, window: slow}
             exp_annotations:
               summary: "POST /payments is slower than 500ms too often; the monthly error budget will be gone in about 5 days."
-              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
+              runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
 
   # The relay has stopped (or the broker is down): 5 more rows every minute, none sent.
   - name: outbox lag
@@ -144,4 +144,4 @@ tests:
           - exp_labels: {service: payment-service, severity: ticket}
             exp_annotations:
               summary: "The payment-events outbox has not emptied in 10 minutes and is still growing."
-              runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentEventsOutboxLag.md
+              runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentEventsOutboxLag.md

@@ -49,26 +49,26 @@ groups:
         labels: {service: payment-service, slo: success, severity: page, window: fast}
         annotations:
           summary: Payment executions are failing for technical reasons; the monthly error budget will be gone in about 2 days.
-          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+          runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
       - alert: PaymentSuccessBudgetBurn
         expr: payment:execution_errors:ratio_rate6h > 6 * 0.005 and payment:execution_errors:ratio_rate30m > 6 * 0.005
         labels: {service: payment-service, slo: success, severity: ticket, window: slow}
         annotations:
           summary: Payment executions are failing for technical reasons; the monthly error budget will be gone in about 5 days.
-          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
+          runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentSuccessBudgetBurn.md
 
       - alert: PaymentLatencyBudgetBurn
         expr: payment:create_slow:ratio_rate1h > 14.4 * 0.01 and payment:create_slow:ratio_rate5m > 14.4 * 0.01
         labels: {service: payment-service, slo: latency, severity: page, window: fast}
         annotations:
           summary: POST /payments is slower than 500ms too often; the monthly error budget will be gone in about 2 days.
-          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
+          runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
       - alert: PaymentLatencyBudgetBurn
         expr: payment:create_slow:ratio_rate6h > 6 * 0.01 and payment:create_slow:ratio_rate30m > 6 * 0.01
         labels: {service: payment-service, slo: latency, severity: ticket, window: slow}
         annotations:
           summary: POST /payments is slower than 500ms too often; the monthly error budget will be gone in about 5 days.
-          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
+          runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentLatencyBudgetBurn.md
 
   # Cause alerts: each names something an SLO can't see, or sees late. Tickets, never pages.
   - name: payment-causes
@@ -81,7 +81,7 @@ groups:
         labels: {service: payment-service, severity: ticket}
         annotations:
           summary: The payment-events outbox has not emptied in 10 minutes and is still growing.
-          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentEventsOutboxLag.md
+          runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentEventsOutboxLag.md
 
       # Names which system is down; the SLO only says customers are affected. Not "open" == 1: an open breaker lets
       # trial calls through as soon as one arrives after 10s (half-open) and opens again if they fail, so it flips.
@@ -92,7 +92,7 @@ groups:
         labels: {service: payment-service, severity: ticket}
         annotations:
           summary: "The {{ $labels.name }} circuit breaker has not closed for 5 minutes: calls to it fail at once."
-          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/CircuitBreakerOpen.md
+          runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/CircuitBreakerOpen.md
 
       # Reconciliation should settle a lost answer within the 2m threshold plus a 1m run (application.properties).
       # 5 more minutes means several runs have failed to, or none has run. Keep 120 in step with the threshold.
@@ -102,4 +102,4 @@ groups:
         labels: {service: payment-service, severity: ticket}
         annotations:
           summary: A payment has been PROCESSING for over 7 minutes; reconciliation is not settling it.
-          runbook_url: https://github.com/dsofianos78/java-payment-service/blob/main/docs/runbooks/PaymentsStuckInProcessing.md
+          runbook_url: https://github.com/codeaiforge/java-payment-service/blob/main/docs/runbooks/PaymentsStuckInProcessing.md

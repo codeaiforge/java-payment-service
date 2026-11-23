@@ -26,7 +26,7 @@ class AlertRulesTest {
 
 	private static final Path PROMETHEUS_RULES = Path.of("observability/prometheus/rules/payment-slo.yml");
 	private static final Path LOKI_RULES = Path.of("observability/loki/rules/payment-logs.yml");
-	private static final String REPOSITORY = "https://github.com/dsofianos78/java-payment-service/blob/main/";
+	private static final String REPOSITORY = "https://github.com/codeaiforge/java-payment-service/blob/main/";
 
 	// promtool ships in the Prometheus image docker-compose.yml runs, so the rules are tested by the same version.
 	// The test cases are in src/test/resources/prometheus/payment-slo-test.yml.
