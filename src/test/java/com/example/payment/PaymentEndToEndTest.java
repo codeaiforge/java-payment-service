@@ -112,7 +112,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * authorization, limit and payment systems. Only the HTTP server is simulated (MockMvc).
  *
  * Every request carries a token for customer CUST-1001, who holds ACC-10001
- * (wiremock/mappings/accounts.json). jwt() stands in for a signed token; two
+ * (wiremock/mappings/accounts.json). jwt() stands in for a signed token; three
  * tests sign real ones with the local key.
  *
  * Metrics and tracing are on as in production (Boot propagates the
@@ -266,6 +266,23 @@ class PaymentEndToEndTest {
 
 		mockMvc.perform(get("/payments/{id}", UUID.randomUUID()).header("Authorization", "Bearer " + forged))
 				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void operationsNeedTheOperateScope() throws Exception {
+		mockMvc.perform(get("/operations/anything").with(customer()))
+				.andExpect(status().isForbidden());
+	}
+
+	// A real token, so the scope claim is mapped to SCOPE_payments.operate as an identity provider's would be.
+	// Past security there is no endpoint yet: 404, not 401 or 403.
+	@Test
+	void anOperatorTokenPassesSecurityOnOperations() throws Exception {
+		String operator = signedToken(localJwtSecret,
+				new JWTClaimsSet.Builder().subject("OPS-0001").claim("scope", "payments.operate").build());
+
+		mockMvc.perform(get("/operations/anything").header("Authorization", "Bearer " + operator))
+				.andExpect(status().isNotFound());
 	}
 
 	@Test
@@ -1316,8 +1333,11 @@ class PaymentEndToEndTest {
 
 	// What an identity provider would issue, signed with the given key. No expiry: a test token.
 	private static String signedToken(String key) throws Exception {
-		SignedJWT token = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256),
-				new JWTClaimsSet.Builder().subject("CUST-1001").build());
+		return signedToken(key, new JWTClaimsSet.Builder().subject("CUST-1001").build());
+	}
+
+	private static String signedToken(String key, JWTClaimsSet claims) throws Exception {
+		SignedJWT token = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
 		token.sign(new MACSigner(key.getBytes(StandardCharsets.UTF_8)));
 		return token.serialize();
 	}

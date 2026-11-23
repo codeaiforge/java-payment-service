@@ -232,6 +232,19 @@ ArchitectureTest                         + coreDoesNotDependOnSpringSecurity
 
 No migration: B2 takes `V4`.
 
+## Later addition: the operator scope
+
+After bonus 13, the service gets endpoints for the people who run it, not
+customers, under `/operations/**`. Those need `payments.operate` in the
+token's `scope` claim. Spring maps the claim to the `SCOPE_payments.operate`
+authority, and `SecurityConfiguration` asks for it on that path only. A
+customer token there is `403`. Every other endpoint is unchanged: a valid
+token is enough, and its `sub` is still the customer ID.
+
+Locally, `@operatorToken` in [http/payments.http](../../http/payments.http)
+carries the scope, signed with the same local key. One scope covers both
+looking and acting; split it when some operators should only look.
+
 ## Known shortcuts
 
 - **No customer ID in logs or metrics** (Episode 15). Nothing new is logged.

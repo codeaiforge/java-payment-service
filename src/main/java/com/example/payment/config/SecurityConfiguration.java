@@ -20,6 +20,10 @@ import java.nio.charset.StandardCharsets;
  * {@code sub} is the customer ID. The service only consumes tokens: it has no
  * users, no login and no roles.
  *
+ * One scope: {@code /operations/**} is for the people who run the service, not
+ * customers, and needs {@code payments.operate} in the token's {@code scope} claim.
+ * Every other endpoint still only needs a valid token.
+ *
  * Who may touch which payment is not decided here but in the application
  * services, which never see a token, only the customer ID.
  */
@@ -32,6 +36,8 @@ public class SecurityConfiguration {
 				.authorizeHttpRequests(requests -> requests
 						.requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/prometheus", "/v3/api-docs/**",
 								"/swagger-ui.html", "/swagger-ui/**").permitAll()
+						// SHORTCUT: one scope for reading and acting; split it when some operators should only look.
+						.requestMatchers("/operations/**").hasAuthority("SCOPE_payments.operate")
 						.anyRequest().authenticated())
 				// No answer is a 401 with WWW-Authenticate: Bearer.
 				.oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))

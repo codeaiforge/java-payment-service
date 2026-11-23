@@ -10,10 +10,12 @@
 # Since Bonus 01 every /payments request needs a bearer token. These are signed with the local key
 # (application-local.properties) and never expire: local use only. CUST-1001 holds ACC-10001 and ACC-20001;
 # CUST-2002 holds ACC-30001 (wiremock/mappings/accounts.json).
+# operatorToken (OPS-0001) carries scope payments.operate, which /operations/** requires; it holds no accounts.
 
 @baseUrl = http://localhost:8080
 @token = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJDVVNULTEwMDEifQ.dBtBctssK74kMTXqNo4zPSkk--7cSdouBA4q40hCBb8
 @otherToken = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJDVVNULTIwMDIifQ.ZJZiegB_bFlLacCyV-BTegv-ZFEG4R4JdS0knsWwV60
+@operatorToken = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJPUFMtMDAwMSIsInNjb3BlIjoicGF5bWVudHMub3BlcmF0ZSJ9.QcmtgnjwxhJ3M2VJJlfwP4dsOElZMTGQHQFuirO7gwc
 
 ### Episode 01 — create payment -> 201
 POST {{baseUrl}}/payments
@@ -643,3 +645,7 @@ Content-Type: application/json
   "currency": "EUR",
   "reference": "Rate limit"
 }
+
+### Operator scope — a customer token on /operations/** -> 403
+GET {{baseUrl}}/operations/reconciliation
+Authorization: Bearer {{token}}
