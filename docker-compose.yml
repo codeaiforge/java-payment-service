@@ -159,5 +159,16 @@ services:
     volumes:
       - ./observability/grafana:/etc/grafana/provisioning:ro
 
+  # The operations agent's model (docs/episodes/bonus-14), only with --profile agent: the image and a model are a few
+  # GB, more than the rest of this stack, so it isn't started for everyone. The model is kept in the volume.
+  ollama:
+    profiles: [agent]
+    image: ollama/ollama:0.40.16
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
 volumes:
   payments-data:
+  ollama-models:

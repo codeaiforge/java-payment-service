@@ -27,6 +27,10 @@
 		<apicurio-registry.version>3.3.3</apicurio-registry.version>
 		<avro.version>1.12.2</avro.version>
 		<bucket4j.version>8.21.0</bucket4j.version>
+		<!-- The operations agent (docs/episodes/bonus-14). 2.0.x is the Spring AI line for Boot 4.0 and 4.1; 2.1 tracks
+		     Boot 4.2. LangGraph4j 1.9.10 is built against Spring AI 2.0.1. -->
+		<spring-ai.version>2.0.3</spring-ai.version>
+		<langgraph4j.version>1.9.10</langgraph4j.version>
 	</properties>
 
 	<dependencyManagement>
@@ -43,6 +47,34 @@
 				<groupId>org.springframework.cloud</groupId>
 				<artifactId>spring-cloud-dependencies</artifactId>
 				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- The Anthropic and OpenAI SDKs ask for OkHttp 4.12 (artifact okhttp) and okio 3.6; the OpenTelemetry exporter
+			     already brings OkHttp 5.3.2 (okhttp-jvm) and okio 3.16.4. Both ship the same okhttp3 and okio classes, and
+			     the first jar on the classpath would win. Managed to the versions already here, so there is one of each;
+			     OkHttp 5 keeps 4's API, and both SDKs' clients are built on it in AgentDependenciesTest. -->
+			<dependency>
+				<groupId>com.squareup.okhttp3</groupId>
+				<artifactId>okhttp</artifactId>
+				<version>5.3.2</version>
+			</dependency>
+			<dependency>
+				<groupId>com.squareup.okio</groupId>
+				<artifactId>okio</artifactId>
+				<version>3.16.4</version>
+			</dependency>
+			<dependency>
+				<groupId>org.springframework.ai</groupId>
+				<artifactId>spring-ai-bom</artifactId>
+				<version>${spring-ai.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.bsc.langgraph4j</groupId>
+				<artifactId>langgraph4j-bom</artifactId>
+				<version>${langgraph4j.version}</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
@@ -150,6 +182,28 @@
 			<groupId>com.bucket4j</groupId>
 			<artifactId>bucket4j_jdk17-postgresql</artifactId>
 			<version>${bucket4j.version}</version>
+		</dependency>
+		<!-- The operations agent (docs/episodes/bonus-14): a LangGraph4j graph whose model nodes call a Spring AI
+		     ChatClient. One provider is chosen by profile (spring.ai.model.chat); none is active unless the agent profile
+		     is, so without it no chat model is created and nothing changes.
+		     Jackson: Spring AI itself is on Jackson 3 (tools.jackson), like Boot. Jackson 2 was already here (2.21.5,
+		     through earlier dependencies); the Anthropic SDK adds two Jackson 2 modules, jdk8 and kotlin, for its own
+		     requests only. The app's JSON is Boot's Jackson 3 mapper, unchanged: every JSON test passes as before. -->
+		<dependency>
+			<groupId>org.bsc.langgraph4j</groupId>
+			<artifactId>langgraph4j-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-ollama</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-anthropic</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-openai</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>
