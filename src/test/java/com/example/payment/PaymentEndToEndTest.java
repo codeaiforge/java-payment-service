@@ -296,6 +296,17 @@ class PaymentEndToEndTest {
 		externalSystems.verify(1, postRequestedFor(urlEqualTo("/payment-orders")).withHeader("Idempotency-Key", equalTo(paymentId)));
 	}
 
+	// Without the agent profile the operations agent isn't there at all (docs/episodes/bonus-14).
+	@Test
+	void withoutTheAgentProfileThereAreNoInvestigations() throws Exception {
+		String operator = signedToken(localJwtSecret,
+				new JWTClaimsSet.Builder().subject("OPS-0001").claim("scope", "payments.operate").build());
+
+		mockMvc.perform(post("/operations/investigations").header("Authorization", "Bearer " + operator)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"paymentId\": \"" + UUID.randomUUID() + "\"}"))
+				.andExpect(status().isNotFound());
+	}
+
 	// The scheduler runs in this test too, so whether a lock is held right now varies; the shape and the scope don't.
 	@Test
 	void anOperatorSeesWhetherReconciliationRuns() throws Exception {

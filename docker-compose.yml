@@ -14,7 +14,9 @@ services:
     environment:
       # Accepts tokens signed with the local key (application-local.properties). A real deployment sets
       # SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI instead.
-      SPRING_PROFILES_ACTIVE: local
+      # Add the operations agent (docs/episodes/bonus-14) with SPRING_PROFILES_ACTIVE=local,agent and --profile agent.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      OLLAMA_BASE_URL: http://ollama:11434
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payments
       SPRING_DATASOURCE_USERNAME: payments
       SPRING_DATASOURCE_PASSWORD: payments

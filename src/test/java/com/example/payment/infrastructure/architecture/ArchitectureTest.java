@@ -23,6 +23,7 @@ class ArchitectureTest {
 
 	private static final String DOMAIN = "com.example.payment.domain..";
 	private static final String WEB = "com.example.payment.infrastructure.adapter.primary.web..";
+	private static final String[] AGENT_LIBRARIES = {"org.springframework.ai..", "org.bsc.langgraph4j.."};
 
 	// Infrastructure -> Application -> Domain, never the reverse (docs/episodes/20).
 	// Config wires everything, so it may see every layer and no layer may see it.
@@ -48,6 +49,19 @@ class ArchitectureTest {
 					"com.example.payment.application.service..",
 					"com.example.payment.application.validation..",
 					"com.example.payment.infrastructure.adapter.secondary..");
+
+	// The operations agent is one driving adapter (docs/episodes/bonus-14). The model and the graph library stay in it
+	// and in config, which wires it: nothing the core decides can depend on what a model says.
+	@ArchTest
+	static final ArchRule coreDoesNotDependOnTheAgentsLibraries = noClasses()
+			.that().resideInAnyPackage(DOMAIN, "com.example.payment.application..")
+			.should().dependOnClassesThat().resideInAnyPackage(AGENT_LIBRARIES);
+
+	@ArchTest
+	static final ArchRule onlyTheAgentAdapterUsesTheAgentsLibraries = noClasses()
+			.that().resideOutsideOfPackages("com.example.payment.infrastructure.adapter.primary.agent..",
+					"com.example.payment.config..")
+			.should().dependOnClassesThat().resideInAnyPackage(AGENT_LIBRARIES);
 
 	@ArchTest
 	static final ArchRule domainDoesNotDependOnFrameworks = noClasses()

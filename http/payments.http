@@ -662,3 +662,15 @@ Authorization: Bearer {{operatorToken}}
 ### Payment history — what happened to it, oldest first -> 200 [{from, to, at}]; another customer -> 404
 GET {{baseUrl}}/payments/{{refundPaymentId}}/history
 Authorization: Bearer {{token}}
+
+### Bonus 14 — investigate a payment (agent profile) -> 201 {evidence, diagnosis, allowedActions, proposal}; nothing runs
+# Use the id of a PROCESSING payment, such as a "TIMEOUT" one executed above. Without the agent profile -> 404.
+POST {{baseUrl}}/operations/investigations
+Authorization: Bearer {{operatorToken}}
+Content-Type: application/json
+
+{"paymentId": "00000000-0000-0000-0000-000000000000"}
+
+### Bonus 14 — read an investigation back -> 200; unknown id -> 404
+GET {{baseUrl}}/operations/investigations/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{operatorToken}}
