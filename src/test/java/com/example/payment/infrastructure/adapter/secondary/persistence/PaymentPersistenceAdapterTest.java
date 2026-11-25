@@ -88,7 +88,8 @@ class PaymentPersistenceAdapterTest {
 		payment.authorize();
 		adapter.updateStatus(payment, PaymentStatus.CREATED);
 		payment.startProcessing();
-		Instant beforeProcessing = Instant.now();
+		// A millisecond back: PostgreSQL keeps microseconds, so a time taken just before the update can round to the same value.
+		Instant beforeProcessing = Instant.now().minusMillis(1);
 		adapter.updateStatus(payment, PaymentStatus.AUTHORIZED);
 		entityManager.clear();
 
