@@ -11,11 +11,13 @@
 # (application-local.properties) and never expire: local use only. CUST-1001 holds ACC-10001 and ACC-20001;
 # CUST-2002 holds ACC-30001 (wiremock/mappings/accounts.json).
 # operatorToken (OPS-0001) carries scope payments.operate, which /operations/** requires; it holds no accounts.
+# secondOperatorToken (OPS-0002) has the same scope: an agent's proposal is approved by someone who didn't start it.
 
 @baseUrl = http://localhost:8080
 @token = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJDVVNULTEwMDEifQ.dBtBctssK74kMTXqNo4zPSkk--7cSdouBA4q40hCBb8
 @otherToken = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJDVVNULTIwMDIifQ.ZJZiegB_bFlLacCyV-BTegv-ZFEG4R4JdS0knsWwV60
 @operatorToken = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJPUFMtMDAwMSIsInNjb3BlIjoicGF5bWVudHMub3BlcmF0ZSJ9.QcmtgnjwxhJ3M2VJJlfwP4dsOElZMTGQHQFuirO7gwc
+@secondOperatorToken = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJPUFMtMDAwMiIsInNjb3BlIjoicGF5bWVudHMub3BlcmF0ZSJ9.kAcgYfH82apQcB_zT6D7nedH0ztrrmXanbwycgLF7mk
 
 ### Episode 01 — create payment -> 201
 POST {{baseUrl}}/payments
@@ -674,3 +676,12 @@ Content-Type: application/json
 ### Bonus 14 — read an investigation back -> 200; unknown id -> 404
 GET {{baseUrl}}/operations/investigations/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{operatorToken}}
+
+### Bonus 15 — approve a proposal (a second operator) -> 200 {status: EXECUTED | NO_LONGER_NEEDED, result}
+# The operator who started it -> 403; already approved or rejected -> 409. Use the id from the Bonus 14 request.
+POST {{baseUrl}}/operations/investigations/00000000-0000-0000-0000-000000000000/approve
+Authorization: Bearer {{secondOperatorToken}}
+
+### Bonus 15 — reject a proposal -> 200 {status: REJECTED}; nothing runs
+POST {{baseUrl}}/operations/investigations/00000000-0000-0000-0000-000000000000/reject
+Authorization: Bearer {{secondOperatorToken}}

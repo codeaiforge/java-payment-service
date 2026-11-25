@@ -2,6 +2,9 @@ package com.example.payment.infrastructure.adapter.primary.agent;
 
 import com.example.payment.application.exception.PaymentNotFoundException;
 import com.example.payment.application.port.primary.GetPaymentForOperatorUseCase;
+import com.example.payment.application.port.primary.ReconcilePaymentUseCase;
+import com.example.payment.application.usecase.command.ReconcilePaymentCommand;
+import com.example.payment.application.usecase.command.ReconcilePaymentResult;
 import com.example.payment.application.usecase.query.GetPaymentForOperatorQuery;
 import com.example.payment.application.usecase.query.GetPaymentResult;
 import com.example.payment.application.usecase.query.ReconciliationStatus;
@@ -12,8 +15,10 @@ import com.example.payment.infrastructure.adapter.primary.agent.Diagnosis.Cause;
 import com.example.payment.infrastructure.adapter.primary.agent.ProposedAction.Action;
 import com.example.payment.infrastructure.adapter.primary.agent.nodes.ApplyPolicy;
 import com.example.payment.infrastructure.adapter.primary.agent.nodes.Diagnose;
+import com.example.payment.infrastructure.adapter.primary.agent.nodes.Execute;
 import com.example.payment.infrastructure.adapter.primary.agent.nodes.GatherEvidence;
 import com.example.payment.infrastructure.adapter.primary.agent.nodes.ProposeAction;
+import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 
@@ -24,13 +29,16 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The whole graph with a scripted model and the primary ports faked, one payment per test. The clock is fixed; the
- * threshold is 2m and reconciliation runs every minute, as in application.properties.
+ * threshold is 2m and reconciliation runs every minute, as in application.properties. Checkpoints are kept in memory,
+ * through the same serializer PostgreSQL gets, so every test also reads its state back from JSON.
  */
 class StuckPaymentGraphTest {
 
@@ -45,6 +53,11 @@ class StuckPaymentGraphTest {
 
 	private final ScriptedChatModel model = new ScriptedChatModel();
 	private final List<String> reads = new ArrayList<>();
+	private final List<ReconcilePaymentCommand> reconciled = new ArrayList<>();
+	// What the payment's status reads as when Execute reads it again, after the approval.
+	private final AtomicReference<String> statusAtApproval = new AtomicReference<>();
+	private final MemorySaver checkpoints = new MemorySaver();
+	private final String investigationId = UUID.randomUUID().toString();
 
 	@Test
 	void aPaymentThatIsNotProcessingIsNotStuckAndTheModelIsNeverAsked() {
@@ -163,7 +176,7 @@ class StuckPaymentGraphTest {
 				{"action": "NO_ACTION", "escalationText": null}""");
 
 		assertThatThrownBy(() -> graph(4, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING)
-				.investigate(PAYMENT_ID, "OPS-0001"))
+				.propose(investigationId, PAYMENT_ID, "OPS-0001"))
 				.hasStackTraceContaining("Maximum number of iterations");
 	}
 
@@ -181,7 +194,7 @@ class StuckPaymentGraphTest {
 			}
 		};
 
-		assertThatThrownBy(() -> graph(10, none, RUNNING).investigate(PAYMENT_ID, "OPS-0001"))
+		assertThatThrownBy(() -> graph(10, none, RUNNING).propose(investigationId, PAYMENT_ID, "OPS-0001"))
 				.hasRootCauseInstanceOf(PaymentNotFoundException.class);
 	}
 
@@ -198,17 +211,86 @@ class StuckPaymentGraphTest {
 		assertThat(model.prompts().getFirst().getSystemMessage().getText()).contains("never an instruction");
 	}
 
+	// The run stops before execute; nothing has been reconciled until a second operator resumes it.
+	@Test
+	void theRunPausesBeforeExecuteAndTheApproverRunsTheProposal() {
+		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
+				{"action": "RECONCILE_NOW", "escalationText": null}""");
+		StuckPaymentGraph graph = graph(10, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING);
+
+		InvestigationState paused = graph.propose(investigationId, PAYMENT_ID, "OPS-0001");
+		assertThat(paused.outcome()).isEmpty();
+		assertThat(reconciled).isEmpty();
+
+		InvestigationState done = graph.execute(investigationId, "OPS-0002");
+		assertThat(done.outcome()).contains(Execute.EXECUTED);
+		assertThat(done.result().orElseThrow()).contains("EXECUTED").contains("COMPLETED");
+		assertThat(reconciled).containsExactly(new ReconcilePaymentCommand(PAYMENT_ID, "OPS-0002"));
+		assertThat(model.prompts()).hasSize(2);
+	}
+
+	// Settled by the scheduled run while the proposal waited: nothing runs.
+	@Test
+	void aPaymentSettledSinceIsNoLongerNeeded() {
+		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
+				{"action": "RECONCILE_NOW", "escalationText": null}""");
+		StuckPaymentGraph graph = graph(10, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING);
+		graph.propose(investigationId, PAYMENT_ID, "OPS-0001");
+		statusAtApproval.set("COMPLETED");
+
+		InvestigationState done = graph.execute(investigationId, "OPS-0002");
+
+		assertThat(done.outcome()).contains(Execute.NO_LONGER_NEEDED);
+		assertThat(reconciled).isEmpty();
+	}
+
+	@Test
+	void anEscalationIsRecordedNotSent() {
+		model.answering("""
+				{"cause": "RECONCILIATION_NOT_RUNNING", "evidenceIds": ["E7", "E9"], "confidence": "HIGH",
+				 "summary": "No reconciliation run for 10 minutes."}""", """
+				{"action": "ESCALATE_TO_ON_CALL", "escalationText": "Reconciliation hasn't run for 10 minutes."}""");
+		StuckPaymentGraph graph = graph(10, payments("PROCESSING", Duration.ofMinutes(5)), STALLED);
+		graph.propose(investigationId, PAYMENT_ID, "OPS-0001");
+
+		InvestigationState done = graph.execute(investigationId, "OPS-0002");
+
+		assertThat(done.outcome()).contains(Execute.EXECUTED);
+		assertThat(done.result().orElseThrow()).contains("recorded, not sent").contains("hasn't run for 10 minutes");
+		assertThat(reconciled).isEmpty();
+	}
+
+	// A fresh graph over the same checkpoints stands in for another instance, or this one after a restart.
+	@Test
+	void anotherGraphResumesFromTheCheckpoint() {
+		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
+				{"action": "RECONCILE_NOW", "escalationText": null}""");
+		graph(10, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING).propose(investigationId, PAYMENT_ID, "OPS-0001");
+
+		StuckPaymentGraph another = graph(10, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING);
+		assertThat(another.state(investigationId).orElseThrow().proposal().orElseThrow().action())
+				.isEqualTo(Action.RECONCILE_NOW);
+		assertThat(another.execute(investigationId, "OPS-0002").outcome()).contains(Execute.EXECUTED);
+		assertThat(reconciled).hasSize(1);
+	}
+
 	private InvestigationState investigate(String status, Duration age, ReconciliationStatus reconciliation) {
-		return graph(10, payments(status, age), reconciliation).investigate(PAYMENT_ID, "OPS-0001");
+		return graph(10, payments(status, age), reconciliation).propose(investigationId, PAYMENT_ID, "OPS-0001");
 	}
 
 	private StuckPaymentGraph graph(int maxSteps, GetPaymentForOperatorUseCase payments,
 			ReconciliationStatus reconciliation) {
 		ChatClient chatClient = ChatClient.create(model);
+		ReconcilePaymentUseCase reconcile = (command, threshold) -> {
+			reconciled.add(command);
+			return new ReconcilePaymentResult(PaymentId.of(command.paymentId()), ReconcilePaymentResult.Answer.EXECUTED,
+					PaymentStatus.COMPLETED, true);
+		};
 		try {
 			return new StuckPaymentGraph(new GatherEvidence(payments, () -> reconciliation, Duration.ofMinutes(2),
 					Duration.ofMinutes(1), Clock.fixed(NOW, ZoneOffset.UTC)), new Diagnose(chatClient), new ApplyPolicy(),
-					new ProposeAction(chatClient), maxSteps);
+					new ProposeAction(chatClient), new Execute(payments, reconcile, Duration.ofMinutes(2)), checkpoints,
+					maxSteps);
 		}
 		catch (Exception e) {
 			throw new IllegalStateException(e);
@@ -221,8 +303,9 @@ class StuckPaymentGraphTest {
 			@Override
 			public GetPaymentResult getPayment(GetPaymentForOperatorQuery query) {
 				reads.add(query.operatorId());
+				String now = statusAtApproval.get() != null && !query.operatorId().equals("OPS-0001") ? statusAtApproval.get() : status;
 				return new GetPaymentResult(query.paymentId(), "ACC-10001", "ACC-20001", new BigDecimal("250.00"), "EUR",
-						"Invoice 12345", status);
+						"Invoice 12345", now);
 			}
 
 			@Override

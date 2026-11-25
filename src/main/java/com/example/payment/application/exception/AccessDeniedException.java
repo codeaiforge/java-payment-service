@@ -13,4 +13,8 @@ public class AccessDeniedException extends RuntimeException {
 	public AccessDeniedException(AccountId accountId) {
 		super("Account " + accountId + " is not held by the caller");
 	}
+
+	public AccessDeniedException(String message) {
+		super(message);
+	}
 }

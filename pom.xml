@@ -193,6 +193,11 @@
 			<groupId>org.bsc.langgraph4j</groupId>
 			<artifactId>langgraph4j-core</artifactId>
 		</dependency>
+		<!-- Paused investigations survive a restart (docs/episodes/bonus-15). Its tables come from Flyway (V14), not from it. -->
+		<dependency>
+			<groupId>org.bsc.langgraph4j</groupId>
+			<artifactId>langgraph4j-postgres-saver</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-ollama</artifactId>

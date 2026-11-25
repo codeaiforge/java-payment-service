@@ -108,8 +108,8 @@
 <text x="38" y="1080" class="sub" text-anchor="start" >paged by a stuck payment</text>
 <text x="38" y="1104" class="ln" text-anchor="start">HTTPS + Bearer JWT</text>
 <text x="38" y="1119" class="mono" text-anchor="start">scope payments.operate</text>
-<text x="38" y="1134" class="mut" text-anchor="start">reads the agent&#x27;s proposal,</text>
-<text x="38" y="1149" class="mut" text-anchor="start">then acts on it, or doesn&#x27;t</text>
+<text x="38" y="1134" class="mut" text-anchor="start">starts one; another operator</text>
+<text x="38" y="1149" class="mut" text-anchor="start">approves it (four eyes)</text>
 </g>
 <g class="node ext">
 <clipPath id="cl4"><rect x="26" y="400" width="222" height="114" rx="8"/></clipPath>
@@ -247,11 +247,11 @@
 <text x="338" y="950" class="sub" text-anchor="start" >an operator&#x27;s investigation</text>
 <text x="338" y="974" class="ln" text-anchor="start"><tspan class="b">InvestigationController</tspan></text>
 <text x="338" y="989" class="mono" text-anchor="start">POST   /operations/investigations</text>
-<text x="338" y="1004" class="mono" text-anchor="start">GET    …/investigations/{id}</text>
+<text x="338" y="1004" class="mono" text-anchor="start">POST   …/{id}/approve · /reject</text>
 <text x="338" y="1019" class="ln" text-anchor="start"><tspan class="b">StuckPaymentGraph</tspan> · LangGraph4j</text>
 <text x="338" y="1034" class="mut" text-anchor="start">evidence → diagnose → policy → propose</text>
 <text x="338" y="1049" class="mut" text-anchor="start">Spring AI ChatClient, answers checked</text>
-<text x="338" y="1064" class="mut" text-anchor="start">by code; nothing it proposes runs</text>
+<text x="338" y="1064" class="mut" text-anchor="start">runs once, after a 2nd operator approves</text>
 <text x="338" y="1079" class="mut" text-anchor="start">scope payments.operate · ≤ 10 steps</text>
 </g>
 <g class="node core" data-f="create execute events recon webhooks"><polygon points="682,186 896,186 966,540 896,894 682,894 612,540" class="hex"/></g>
@@ -780,6 +780,6 @@
 <g class="ew" data-f="recon">
 <circle cx="50" cy="1926" r="10.5" class="nb"/>
 <text x="50" y="1930" class="nbt" text-anchor="middle">17</text>
-<text x="70" y="1930" class="lg" text-anchor="start" >The agent asks a chat model over HTTP; code checks every answer, nothing it proposes runs</text>
+<text x="70" y="1930" class="lg" text-anchor="start" >The agent asks a chat model over HTTP; code checks every answer; a second operator approves</text>
 </g>
 </svg>

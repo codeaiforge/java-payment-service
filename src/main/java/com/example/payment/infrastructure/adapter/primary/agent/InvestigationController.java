@@ -2,81 +2,99 @@ package com.example.payment.infrastructure.adapter.primary.agent;
 
 import com.example.payment.application.exception.PaymentNotFoundException;
 import com.example.payment.application.exception.PaymentValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.example.payment.application.port.primary.DecideInvestigationUseCase;
+import com.example.payment.application.port.primary.GetInvestigationUseCase;
+import com.example.payment.application.port.primary.RecordInvestigationUseCase;
+import com.example.payment.application.usecase.command.DecideInvestigationCommand;
+import com.example.payment.application.usecase.command.FinishInvestigationCommand;
+import com.example.payment.application.usecase.command.OpenInvestigationCommand;
+import com.example.payment.application.usecase.query.Investigation;
 import org.springframework.context.annotation.Profile;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.security.Principal;
-import java.time.Clock;
-import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The operations agent's driving side, like OperationsController: /operations/** needs the payments.operate scope
- * (SecurityConfiguration). An investigation reads and proposes; nothing it proposes runs in bonus 14.
- * Only with the agent profile: without it these endpoints don't exist.
+ * (SecurityConfiguration). Starting an investigation reads and proposes; a second operator's approval runs the
+ * proposal, once. Only with the agent profile: without it these endpoints don't exist.
  */
 @RestController
 @Profile("agent")
 public class InvestigationController {
 
-	private static final Logger log = LoggerFactory.getLogger(InvestigationController.class);
-
 	private final StuckPaymentGraph graph;
-	private final Clock clock;
-	// SHORTCUT: kept in memory, so a restart loses them and each instance knows only its own (bonus 15 stores them).
-	private final Map<String, InvestigationView> investigations = new ConcurrentHashMap<>();
+	private final RecordInvestigationUseCase records;
+	private final DecideInvestigationUseCase decisions;
+	private final GetInvestigationUseCase investigations;
 
-	public InvestigationController(StuckPaymentGraph graph, Clock clock) {
+	public InvestigationController(StuckPaymentGraph graph, RecordInvestigationUseCase records,
+			DecideInvestigationUseCase decisions, GetInvestigationUseCase investigations) {
 		this.graph = graph;
-		this.clock = clock;
+		this.records = records;
+		this.decisions = decisions;
+		this.investigations = investigations;
 	}
 
 	// SHORTCUT: runs in the request, model calls and all, so the caller waits for it (seconds on a small model).
 	@PostMapping("/operations/investigations")
 	public ResponseEntity<InvestigationView> start(@RequestBody StartInvestigationRequest request, Principal operator) {
 		String id = UUID.randomUUID().toString();
-		Instant startedAt = clock.instant();
-		InvestigationView view;
+		InvestigationState state;
 		try {
-			view = InvestigationView.of(id, startedAt, graph.investigate(request.paymentId(), operator.getName()));
+			state = graph.propose(id, request.paymentId(), operator.getName());
 		}
 		catch (RuntimeException e) {
-			rethrowIfTheCallersFault(e);
-			log.warn("Investigation {} of payment {} stopped: {}", id, request.paymentId(), e.getMessage());
-			view = InvestigationView.failed(id, request.paymentId(), operator.getName(), startedAt, e.getMessage());
+			throw callersFaultOr(e);
 		}
-		investigations.put(id, view);
-		return ResponseEntity.created(URI.create("/operations/investigations/" + id)).body(view);
+		ProposedAction proposal = state.proposal().orElseThrow();
+		records.open(new OpenInvestigationCommand(id, request.paymentId(), operator.getName(), proposal.action().name(),
+				proposal.escalationText(), Findings.of(state).toJson()));
+		return ResponseEntity.created(URI.create("/operations/investigations/" + id)).body(view(id));
 	}
 
 	@GetMapping("/operations/investigations/{id}")
 	public InvestigationView get(@PathVariable String id) {
-		InvestigationView view = investigations.get(id);
-		if (view == null) {
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-		}
-		return view;
+		return view(id);
+	}
+
+	// Only the operator whose approval wins the compare-and-set gets here; any other is refused before the graph runs.
+	// SHORTCUT: if this instance dies between the approval and finish, the investigation stays APPROVED with no
+	// result; nothing retries it. The reconcile it runs is safe to run again, an escalation is only recorded.
+	@PostMapping("/operations/investigations/{id}/approve")
+	public InvestigationView approve(@PathVariable String id, Principal operator) {
+		decisions.approve(new DecideInvestigationCommand(id, operator.getName()));
+		InvestigationState state = graph.execute(id, operator.getName());
+		records.finish(new FinishInvestigationCommand(id, Investigation.Status.valueOf(state.outcome().orElseThrow()),
+				state.result().orElseThrow()));
+		return view(id);
+	}
+
+	@PostMapping("/operations/investigations/{id}/reject")
+	public InvestigationView reject(@PathVariable String id, Principal operator) {
+		decisions.reject(new DecideInvestigationCommand(id, operator.getName()));
+		return view(id);
+	}
+
+	private InvestigationView view(String id) {
+		return InvestigationView.of(investigations.get(id));
 	}
 
 	// The graph wraps what a node throws. An unknown or malformed payment id is the caller's mistake, a 404 or 400 as
-	// on every other endpoint, not a failed investigation.
-	private static void rethrowIfTheCallersFault(Throwable e) {
+	// on every other endpoint; anything else is ours, a 500.
+	private static RuntimeException callersFaultOr(RuntimeException e) {
 		for (Throwable cause = e; cause != null; cause = cause.getCause()) {
 			if (cause instanceof PaymentNotFoundException || cause instanceof PaymentValidationException) {
-				throw (RuntimeException) cause;
+				return (RuntimeException) cause;
 			}
 		}
+		return e;
 	}
 }

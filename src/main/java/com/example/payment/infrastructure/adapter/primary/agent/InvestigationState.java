@@ -20,6 +20,9 @@ public class InvestigationState extends AgentState {
 	public static final String DIAGNOSE_ATTEMPTS = "diagnoseAttempts";
 	public static final String ALLOWED_ACTIONS = "allowedActions";
 	public static final String PROPOSAL = "proposal";
+	public static final String APPROVER = "approver";
+	public static final String OUTCOME = "outcome";
+	public static final String RESULT = "result";
 
 	public InvestigationState(Map<String, Object> data) {
 		super(data);
@@ -52,5 +55,19 @@ public class InvestigationState extends AgentState {
 
 	public Optional<ProposedAction> proposal() {
 		return value(PROPOSAL);
+	}
+
+	/** The second operator, set when the paused run is resumed: what runs, runs as them. */
+	public String approver() {
+		return this.<String>value(APPROVER).orElseThrow();
+	}
+
+	/** EXECUTED or NO_LONGER_NEEDED, once Execute has run. */
+	public Optional<String> outcome() {
+		return value(OUTCOME);
+	}
+
+	public Optional<String> result() {
+		return value(RESULT);
 	}
 }

@@ -6,7 +6,9 @@ import com.example.payment.application.exception.AccountUnavailableException;
 import com.example.payment.application.exception.ExternalSystemUnavailableException;
 import com.example.payment.application.exception.IdempotencyKeyInProgressException;
 import com.example.payment.application.exception.IdempotencyKeyMismatchException;
+import com.example.payment.application.exception.InvalidInvestigationStateException;
 import com.example.payment.application.exception.InvalidPaymentStateException;
+import com.example.payment.application.exception.InvestigationNotFoundException;
 import com.example.payment.application.exception.PaymentAuthorizationException;
 import com.example.payment.application.exception.PaymentLimitExceededException;
 import com.example.payment.application.exception.PaymentNotFoundException;
@@ -39,14 +41,15 @@ class PaymentExceptionHandler {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
 	}
 
-	@ExceptionHandler({PaymentNotFoundException.class, WebhookNotFoundException.class})
+	@ExceptionHandler({PaymentNotFoundException.class, WebhookNotFoundException.class, InvestigationNotFoundException.class})
 	ProblemDetail notFound(RuntimeException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
 	}
 
 	// The request is fine and the payment exists; it is just in the wrong state for this action.
 	// Same for a key whose first request hasn't finished: retry later.
-	@ExceptionHandler({InvalidPaymentStateException.class, IdempotencyKeyInProgressException.class})
+	@ExceptionHandler({InvalidPaymentStateException.class, IdempotencyKeyInProgressException.class,
+			InvalidInvestigationStateException.class})
 	ProblemDetail conflict(RuntimeException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 	}

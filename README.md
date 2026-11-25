@@ -247,6 +247,7 @@ Each part builds on the one before, in order.
 | B12 | [Rate Limits per Customer](docs/episodes/bonus-12-rate-limits.md) | Token buckets per customer, shared by every instance; `429` with `Retry-After`; fail open | `bonus-12-rate-limits` |
 | B13 | [Deploying to Kubernetes](docs/episodes/bonus-13-kubernetes.md) | Pods replaced without a failed request: probes, graceful shutdown, expand/contract migrations | `bonus-13-kubernetes` |
 | B14 | [An Operations Agent](docs/episodes/bonus-14-operations-agent.md) | An agent that diagnoses stuck payments and proposes from an allowed set; code decides, the model fills in words | `bonus-14-operations-agent` |
+| B15 | [Four Eyes on the Agent](docs/episodes/bonus-15-agent-approval.md) | A second operator approves a model's proposal; the pause survives restarts; exactly once by compare-and-set | `bonus-15-agent-approval` |
 
 ## Shortcuts in the code
 
