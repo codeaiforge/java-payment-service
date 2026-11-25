@@ -5,7 +5,7 @@
 ![Spring Boot 4.1](https://img.shields.io/badge/Spring%20Boot-4.1-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A payment service for a fictional bank, built in 33 tagged steps. Every decision a bank
+A payment service for a fictional bank, built in tagged steps (20 episodes + bonus episodes). Every decision a bank
 reviewer will question (idempotency, unknown outcomes, reconciliation, the outbox,
 running several instances) is made in the commit that needs it, and explained.
 

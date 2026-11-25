@@ -50,6 +50,9 @@ jobs:
           git worktree add ../previous "$previous"
           rm -r ../previous/src/main/resources/db/migration
           cp -r src/main/resources/db/migration ../previous/src/main/resources/db/migration
-          # Tags bonus-11 to bonus-13 lack the webhook tests' keystore (it was gitignored by mistake).
-          cp src/test/resources/webhooks/merchant.p12 ../previous/src/test/resources/webhooks/
+          # Tags bonus-11 to bonus-13 lack the webhook tests' keystore (it was gitignored by mistake). Only those:
+          # a later tag missing a file should fail here, not be patched over.
+          case "$previous" in
+            bonus-1[1-3]-*) cp src/test/resources/webhooks/merchant.p12 ../previous/src/test/resources/webhooks/ ;;
+          esac
           cd ../previous && ./mvnw -B verify
