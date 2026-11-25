@@ -8,9 +8,12 @@ customer doesn't know the outcome.
 
 ## First three checks
 
-1. **Is reconciliation running?** PostgreSQL: `SELECT * FROM shedlock WHERE name = 'reconciliation';`
-   `locked_at` should move about once a minute (B7). If it doesn't, an instance may hold a lock it isn't using:
-   `lock_until` says when it expires.
+1. **Is reconciliation running?** `GET /operations/reconciliation` with an operator token (scope
+   `payments.operate`). `lastRunStartedAt` should move about once a minute (B7); it marks a start, not a success.
+   `runningOn` names the instance holding the lock, or is null when none does. If `lastRunStartedAt` is old and
+   `runningOn` stays set, that instance holds a lock it isn't using: `runningUntil` says when it expires. Without the
+   service, PostgreSQL: `SELECT * FROM shedlock WHERE name = 'reconciliation';` (`locked_at`, `locked_by`,
+   `lock_until`).
 2. **What does it hear back?** `sum by (result) (rate(payments_reconciled_total[10m]))`. Only `unknown`: the payment
    system isn't answering the question either. Loki: `{service_name="payment-service"} |= "not reconciled"`.
 3. **Which payments?** Find the oldest, then settle it now: `POST /operations/payments/{id}/reconcile` with an

@@ -650,6 +650,10 @@ Content-Type: application/json
 GET {{baseUrl}}/operations/reconciliation
 Authorization: Bearer {{token}}
 
+### Operator — is reconciliation running? -> 200 {lastRunStartedAt, runningOn, runningUntil}; nulls when no lock is held
+GET {{baseUrl}}/operations/reconciliation
+Authorization: Bearer {{operatorToken}}
+
 ### Operator — settle one PROCESSING payment now -> 200 {answer, status, stored}; not PROCESSING -> 409
 # Use the id of a payment created with "TIMEOUT" in its reference and executed: its answer was lost.
 POST {{baseUrl}}/operations/payments/00000000-0000-0000-0000-000000000000/reconcile

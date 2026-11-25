@@ -466,3 +466,16 @@ docker compose up -d                       # the infrastructure, as in Episode 1
 | `PaymentEndToEndTest` | **+1.** A `17.17` refund comes back `PROCESSING`. Backdated, it is reconciled by a scheduler run to `COMPLETED`, with a `PROCESSING → COMPLETED` audit row, `REFUND_COMPLETED` after `PAYMENT_COMPLETED` on `payment-events`, one `GET /refund-orders/{refundId}`, and still only one `POST`. |
 
 243 tests, passing.
+
+## Later addition: is reconciliation running?
+
+After bonus 13, an operator can read the reconciliation lock without database
+access: `GET /operations/reconciliation`, with the `payments.operate` scope
+(bonus 01). It answers from ShedLock's row: `lastRunStartedAt` is `locked_at`,
+and `runningOn` and `runningUntil` are `locked_by` and `lock_until` while the
+lock is held, by the database's clock, and null after. Two things the row
+can't say: whether the last run succeeded (`locked_at` moves when a run
+starts), and whether a holder is still working or only sitting out
+`lockAtLeastFor`. How many payments are stuck stays the
+`payments_processing_oldest_age_seconds` gauge. `ReconciliationLockPersistenceAdapterTest`
+covers a held lock, an expired one, no run yet, and another job's lock.

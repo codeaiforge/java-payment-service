@@ -96,6 +96,7 @@ import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -293,6 +294,18 @@ class PaymentEndToEndTest {
 		assertThat(storedStatus(paymentId)).isEqualTo("COMPLETED");
 		// Asked, never sent again.
 		externalSystems.verify(1, postRequestedFor(urlEqualTo("/payment-orders")).withHeader("Idempotency-Key", equalTo(paymentId)));
+	}
+
+	// The scheduler runs in this test too, so whether a lock is held right now varies; the shape and the scope don't.
+	@Test
+	void anOperatorSeesWhetherReconciliationRuns() throws Exception {
+		String operator = signedToken(localJwtSecret,
+				new JWTClaimsSet.Builder().subject("OPS-0001").claim("scope", "payments.operate").build());
+
+		mockMvc.perform(get("/operations/reconciliation").header("Authorization", "Bearer " + operator))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$").value(hasKey("lastRunStartedAt")));
+		mockMvc.perform(get("/operations/reconciliation").with(customer())).andExpect(status().isForbidden());
 	}
 
 	@Test
