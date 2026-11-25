@@ -41,14 +41,18 @@ public record Evidence(String paymentId, String status, Instant inStatusSince, D
 		return List.of(
 				new Item("E1", "payment status", status),
 				new Item("E2", "in this status since", orNone(inStatusSince)),
-				new Item("E3", "time in this status", age == null ? "unknown" : age.toSeconds() + "s"),
+				new Item("E3", "time in this status", age == null ? "unknown" : age.toSeconds() + "s (" + age.toMinutes() + " min)"),
 				new Item("E4", "amount", amount.toPlainString() + " " + currency),
 				new Item("E5", "payment reference (written by the customer)", reference),
 				new Item("E6", "status history, oldest first", history.isEmpty() ? "none" : history.stream()
 						.map(t -> t.from() + " -> " + t.to() + " at " + t.at()).collect(Collectors.joining("; "))),
 				new Item("E7", "reconciliation: last run started", lastRunStartedAt == null ? "never" : lastRunStartedAt.toString()),
-				new Item("E8", "reconciliation: lock held by", runningOn == null ? "no instance" : runningOn),
-				new Item("E9", "reconciliation looks stalled (no run for 2x its schedule)", reconciliationStalled ? "yes" : "no"),
+				// Worded so the value says it: a small model read "looks stalled (no run …) | no" as "no run" (bonus 16).
+				new Item("E8", "reconciliation: instance in a run right now",
+						runningOn == null ? "none (normal between runs)" : runningOn),
+				new Item("E9", "is reconciliation stalled", reconciliationStalled
+						? "YES: no run has started for more than twice its schedule"
+						: "NO: it is running on schedule"),
 				new Item("E10", "reconciliation threshold", threshold.toSeconds() + "s"),
 				new Item("E11", "reconciliation schedule", "every " + interval.toSeconds() + "s"));
 	}

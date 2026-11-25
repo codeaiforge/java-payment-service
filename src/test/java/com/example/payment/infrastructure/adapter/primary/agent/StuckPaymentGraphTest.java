@@ -18,6 +18,7 @@ import com.example.payment.infrastructure.adapter.primary.agent.nodes.Diagnose;
 import com.example.payment.infrastructure.adapter.primary.agent.nodes.Execute;
 import com.example.payment.infrastructure.adapter.primary.agent.nodes.GatherEvidence;
 import com.example.payment.infrastructure.adapter.primary.agent.nodes.ProposeAction;
+import io.micrometer.observation.ObservationRegistry;
 import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -290,7 +291,7 @@ class StuckPaymentGraphTest {
 			return new StuckPaymentGraph(new GatherEvidence(payments, () -> reconciliation, Duration.ofMinutes(2),
 					Duration.ofMinutes(1), Clock.fixed(NOW, ZoneOffset.UTC)), new Diagnose(chatClient), new ApplyPolicy(),
 					new ProposeAction(chatClient), new Execute(payments, reconcile, Duration.ofMinutes(2)), checkpoints,
-					maxSteps);
+					maxSteps, ObservationRegistry.NOOP);
 		}
 		catch (Exception e) {
 			throw new IllegalStateException(e);

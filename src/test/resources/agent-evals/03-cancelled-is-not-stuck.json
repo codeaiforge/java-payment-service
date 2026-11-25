@@ -1,0 +1,9 @@
+{
+  "status": "CANCELLED",
+  "ageSeconds": 120,
+  "reference": "Order 88",
+  "lastRunSecondsAgo": null,
+  "runningOn": null,
+  "expectedCause": "NOT_STUCK",
+  "expectedAction": "NO_ACTION"
+}

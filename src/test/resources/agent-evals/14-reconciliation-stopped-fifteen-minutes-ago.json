@@ -1,0 +1,9 @@
+{
+  "status": "PROCESSING",
+  "ageSeconds": 900,
+  "reference": "Invoice 92",
+  "lastRunSecondsAgo": 900,
+  "runningOn": null,
+  "expectedCause": "RECONCILIATION_NOT_RUNNING",
+  "expectedAction": "ESCALATE_TO_ON_CALL"
+}

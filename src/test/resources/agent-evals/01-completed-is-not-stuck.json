@@ -1,0 +1,9 @@
+{
+  "status": "COMPLETED",
+  "ageSeconds": 600,
+  "reference": "Invoice 12345",
+  "lastRunSecondsAgo": 30,
+  "runningOn": null,
+  "expectedCause": "NOT_STUCK",
+  "expectedAction": "NO_ACTION"
+}

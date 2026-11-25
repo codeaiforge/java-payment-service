@@ -1,0 +1,9 @@
+{
+  "status": "PROCESSING",
+  "ageSeconds": 300,
+  "reference": "Invoice 12345",
+  "lastRunSecondsAgo": 20,
+  "runningOn": null,
+  "expectedCause": "PAYMENT_SYSTEM_NOT_ANSWERING",
+  "expectedAction": "RECONCILE_NOW"
+}

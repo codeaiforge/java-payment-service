@@ -84,7 +84,12 @@ public class Diagnose implements NodeAction<InvestigationState> {
 					.system(Prompts.SYSTEM)
 					.user("""
 							Diagnose why this payment is still PROCESSING. Cite the ids of the facts you rely on.
-							Use UNCLEAR if the facts don't tell you.
+							The causes:
+							- RECONCILIATION_NOT_RUNNING: reconciliation is stalled (E9 is YES), so nothing has asked
+							  the payment system about this payment.
+							- PAYMENT_SYSTEM_NOT_ANSWERING: reconciliation is running on schedule (E9 is NO), it keeps
+							  asking, and the payment is still PROCESSING: the payment system has no answer for it.
+							- UNCLEAR: the facts don't tell you.
 
 							""" + Prompts.dataBlock(evidence))
 					.call()

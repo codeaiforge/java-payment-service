@@ -1,0 +1,9 @@
+{
+  "status": "PROCESSING",
+  "ageSeconds": 600,
+  "reference": "Payroll",
+  "lastRunSecondsAgo": 5,
+  "runningOn": "payment-service-7d9f",
+  "expectedCause": "PAYMENT_SYSTEM_NOT_ANSWERING",
+  "expectedAction": "RECONCILE_NOW"
+}

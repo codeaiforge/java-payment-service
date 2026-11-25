@@ -3,6 +3,7 @@ package com.example.payment;
 import com.example.payment.infrastructure.adapter.primary.agent.ScriptedChatModel;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.jayway.jsonpath.JsonPath;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.MACSigner;
@@ -103,6 +104,11 @@ class AgentApprovalTest {
 		// The change is in the payment's own history, like any reconciliation's.
 		HttpResponse<String> history = get(first, "/payments/" + paymentId + "/history", customer());
 		assertThat((List<String>) JsonPath.read(history.body(), "$[-1:].to")).containsExactly("COMPLETED");
+		// The instance that took the approval timed the wait and counted the end (bonus 16).
+		MeterRegistry meters = second.getBean(MeterRegistry.class);
+		assertThat(meters.find("agent.approval.latency").tag("decision", "APPROVED").timer().count()).isPositive();
+		assertThat(meters.find("agent.investigations").tags("cause", "PAYMENT_SYSTEM_NOT_ANSWERING", "action",
+				"RECONCILE_NOW", "outcome", "EXECUTED").counter().count()).isPositive();
 	}
 
 	// One approval on each instance, released together: the investigation row lets one through, and the payment

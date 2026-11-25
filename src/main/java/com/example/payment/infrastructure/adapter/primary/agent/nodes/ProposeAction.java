@@ -68,9 +68,14 @@ public class ProposeAction implements NodeAction<InvestigationState> {
 					.system(Prompts.SYSTEM)
 					.user("""
 							The diagnosis is %s. Choose exactly one action from: %s.
-							RECONCILE_NOW asks the payment system again now. ESCALATE_TO_PAYMENT_SYSTEM asks its owners
-							about this payment by id. ESCALATE_TO_ON_CALL tells our on-call that reconciliation isn't
-							running. NO_ACTION leaves it to the scheduled run.
+							What each action does, and when the runbook uses it:
+							- RECONCILE_NOW asks the payment system again now. For PAYMENT_SYSTEM_NOT_ANSWERING when the
+							  payment has been in this status less than 30 minutes (E3).
+							- ESCALATE_TO_PAYMENT_SYSTEM asks the payment system's owners about this payment by id. For
+							  PAYMENT_SYSTEM_NOT_ANSWERING at 30 minutes or more: every scheduled run has asked already.
+							- ESCALATE_TO_ON_CALL tells our on-call that reconciliation isn't running. For
+							  RECONCILIATION_NOT_RUNNING.
+							- NO_ACTION leaves it to the scheduled run.
 							If you escalate, write escalationText: a short message for the people you escalate to,
 							citing the payment id and the facts. Otherwise leave it null.
 

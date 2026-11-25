@@ -1,0 +1,9 @@
+{
+  "status": "PROCESSING",
+  "ageSeconds": 30,
+  "reference": "Invoice 77",
+  "lastRunSecondsAgo": 20,
+  "runningOn": null,
+  "expectedCause": "WITHIN_THRESHOLD",
+  "expectedAction": "NO_ACTION"
+}

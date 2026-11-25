@@ -13,6 +13,7 @@ import com.example.payment.infrastructure.adapter.primary.agent.nodes.ProposeAct
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.checkpoint.BaseCheckpointSaver;
 import org.bsc.langgraph4j.checkpoint.PostgresSaverV2;
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -46,13 +47,13 @@ class AgentConfiguration {
 	@Bean
 	StuckPaymentGraph stuckPaymentGraph(ChatClient.Builder chatClientBuilder, GetPaymentForOperatorUseCase payments,
 			GetReconciliationStatusUseCase reconciliation, ReconcilePaymentUseCase reconcile,
-			BaseCheckpointSaver investigationCheckpoints, Clock clock,
+			BaseCheckpointSaver investigationCheckpoints, ObservationRegistry observations, Clock clock,
 			@Value("${payment.reconciliation.threshold}") Duration threshold,
 			@Value("${payment.reconciliation.interval}") Duration interval,
 			@Value("${payment.agent.max-steps}") int maxSteps) throws GraphStateException {
 		ChatClient chatClient = chatClientBuilder.build();
 		return new StuckPaymentGraph(new GatherEvidence(payments, reconciliation, threshold, interval, clock),
 				new Diagnose(chatClient), new ApplyPolicy(), new ProposeAction(chatClient),
-				new Execute(payments, reconcile, threshold), investigationCheckpoints, maxSteps);
+				new Execute(payments, reconcile, threshold), investigationCheckpoints, maxSteps, observations);
 	}
 }

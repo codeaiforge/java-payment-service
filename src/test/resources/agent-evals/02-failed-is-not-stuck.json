@@ -1,0 +1,9 @@
+{
+  "status": "FAILED",
+  "ageSeconds": 3600,
+  "reference": "Rent November",
+  "lastRunSecondsAgo": 30,
+  "runningOn": null,
+  "expectedCause": "NOT_STUCK",
+  "expectedAction": "NO_ACTION"
+}
