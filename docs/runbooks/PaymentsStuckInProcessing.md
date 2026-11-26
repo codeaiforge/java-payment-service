@@ -9,8 +9,8 @@ customer doesn't know the outcome.
 ## First three checks
 
 With the agent profile on, `POST /operations/investigations {"paymentId": "..."}` (operator token) runs checks 1 and
-3 for one payment and proposes what to do, with the escalation drafted. It changes nothing: read its evidence, then act
-yourself (docs/episodes/bonus-14). The checks below are what it does, and what to do when it isn't there.
+3 for one payment and proposes what to do, with the escalation drafted. Nothing runs until a second operator approves it
+(docs/episodes/bonus-14, bonus-15); read its evidence first, or act yourself. The checks below are what it does, and what to do when it isn't there.
 
 1. **Is reconciliation running?** `GET /operations/reconciliation` with an operator token (scope
    `payments.operate`). `lastRunStartedAt` should move about once a minute (B7); it marks a start, not a success.
