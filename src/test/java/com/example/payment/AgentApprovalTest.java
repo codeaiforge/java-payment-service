@@ -168,6 +168,9 @@ class AgentApprovalTest {
 	void aPausedInvestigationSurvivesARestart() throws Exception {
 		String paymentId = stuckPayment();
 		String investigation = start(first, paymentId);
+		// An instance runs reconciliation as it starts; with the lock free, the new one would settle the payment before
+		// the approval (it did, on CI). Held, as after another instance's run, only the approval settles it.
+		jdbc().sql("UPDATE shedlock SET lock_until = now() + interval '1 hour' WHERE name = 'reconciliation'").update();
 		first.close();
 		first = instance();
 
