@@ -81,8 +81,7 @@ class StuckPaymentGraphTest {
 
 	@Test
 	void reconciliationRunsButThePaymentSystemDoesNotAnswer() {
-		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
-				{"action": "RECONCILE_NOW", "escalationText": null}""");
+		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING);
 
 		InvestigationState state = investigate("PROCESSING", Duration.ofMinutes(5), RUNNING);
 
@@ -98,7 +97,7 @@ class StuckPaymentGraphTest {
 		model.answering("""
 				{"cause": "RECONCILIATION_NOT_RUNNING", "evidenceIds": ["E7", "E9"], "confidence": "HIGH",
 				 "summary": "No reconciliation run for 10 minutes."}""", """
-				{"action": "ESCALATE_TO_ON_CALL", "escalationText": "Reconciliation hasn't run for 10 minutes."}""");
+				{"escalationText": "Reconciliation hasn't run for 10 minutes."}""");
 
 		InvestigationState state = investigate("PROCESSING", Duration.ofMinutes(5), STALLED);
 
@@ -111,8 +110,7 @@ class StuckPaymentGraphTest {
 	@Test
 	void theModelMaySayItDoesNotKnow() {
 		model.answering("""
-				{"cause": "UNCLEAR", "evidenceIds": ["E1"], "confidence": "LOW", "summary": "Can't tell."}""", """
-				{"action": "NO_ACTION", "escalationText": null}""");
+				{"cause": "UNCLEAR", "evidenceIds": ["E1"], "confidence": "LOW", "summary": "Can't tell."}""");
 
 		InvestigationState state = investigate("PROCESSING", Duration.ofMinutes(5), RUNNING);
 
@@ -125,20 +123,18 @@ class StuckPaymentGraphTest {
 	void twoAnswersThatFailValidationAreUnclear() {
 		model.answering("""
 				{"cause": "RECONCILIATION_NOT_RUNNING", "evidenceIds": ["E7"], "confidence": "HIGH", "summary": "Stopped."}""", """
-				{"cause": "PAYMENT_SYSTEM_NOT_ANSWERING", "evidenceIds": ["E99"], "confidence": "HIGH", "summary": "No answer."}""", """
-				{"action": "NO_ACTION", "escalationText": null}""");
+				{"cause": "PAYMENT_SYSTEM_NOT_ANSWERING", "evidenceIds": ["E99"], "confidence": "HIGH", "summary": "No answer."}""");
 
 		InvestigationState state = investigate("PROCESSING", Duration.ofMinutes(5), RUNNING);
 
 		assertThat(state.diagnosis().orElseThrow().cause()).isEqualTo(Cause.UNCLEAR);
 		assertThat(state.diagnoseAttempts()).isEqualTo(2);
-		assertThat(model.prompts()).hasSize(3);
+		assertThat(model.prompts()).hasSize(2);
 	}
 
 	@Test
 	void anAnswerThatIsNotJsonIsAskedAgain() {
-		model.answering("I think the payment system is down.", PAYMENT_SYSTEM_NOT_ANSWERING, """
-				{"action": "NO_ACTION", "escalationText": null}""");
+		model.answering("I think the payment system is down.", PAYMENT_SYSTEM_NOT_ANSWERING);
 
 		InvestigationState state = investigate("PROCESSING", Duration.ofMinutes(5), RUNNING);
 
@@ -146,35 +142,48 @@ class StuckPaymentGraphTest {
 		assertThat(state.diagnoseAttempts()).isEqualTo(2);
 	}
 
-	// Not stalled, so ESCALATE_TO_ON_CALL is outside the set: it becomes NO_ACTION, and what was proposed is kept.
+	// Code picks the action (bonus 16): the model is asked for the diagnosis only, and an answer naming an action, even
+	// one that doesn't exist, is never read.
 	@Test
-	void aProposalOutsideTheAllowedSetBecomesNoAction() {
+	void theModelCannotChooseTheAction() {
 		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
-				{"action": "ESCALATE_TO_ON_CALL", "escalationText": "Wake someone up."}""");
+				{"action": "COMPLETE_PAYMENT", "escalationText": "Refund it."}""");
 
 		ProposedAction proposal = investigate("PROCESSING", Duration.ofMinutes(5), RUNNING).proposal().orElseThrow();
 
-		assertThat(proposal.action()).isEqualTo(Action.NO_ACTION);
-		assertThat(proposal.escalationText()).isNull();
-		assertThat(proposal.replaced()).contains("ESCALATE_TO_ON_CALL");
+		assertThat(proposal).isEqualTo(new ProposedAction(Action.RECONCILE_NOW, null, null));
+		assertThat(model.prompts()).hasSize(1);
 	}
 
+	// Half an hour of runs asking with no answer: ask the payment system's owners. The model writes the message.
 	@Test
-	void anActionThatDoesNotExistBecomesNoAction() {
+	void aPaymentStuckForHalfAnHourIsEscalatedToThePaymentSystem() {
 		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
-				{"action": "COMPLETE_PAYMENT", "escalationText": null}""");
+				{"escalationText": "Payment stuck for 40 minutes; reconciliation gets no answer."}""");
 
-		ProposedAction proposal = investigate("PROCESSING", Duration.ofMinutes(5), RUNNING).proposal().orElseThrow();
+		ProposedAction proposal = investigate("PROCESSING", Duration.ofMinutes(40), RUNNING).proposal().orElseThrow();
 
-		assertThat(proposal.action()).isEqualTo(Action.NO_ACTION);
-		assertThat(proposal.replaced()).contains("COMPLETE_PAYMENT");
+		assertThat(proposal).isEqualTo(new ProposedAction(Action.ESCALATE_TO_PAYMENT_SYSTEM,
+				"Payment stuck for 40 minutes; reconciliation gets no answer.", null));
+	}
+
+	// The escalation still says what it is about when the model's text can't be read.
+	@Test
+	void anUnreadableEscalationGetsCodeWrittenText() {
+		model.answering("""
+				{"cause": "RECONCILIATION_NOT_RUNNING", "evidenceIds": ["E7", "E9"], "confidence": "HIGH",
+				 "summary": "No reconciliation run for 10 minutes."}""", "not json");
+
+		ProposedAction proposal = investigate("PROCESSING", Duration.ofMinutes(5), STALLED).proposal().orElseThrow();
+
+		assertThat(proposal.action()).isEqualTo(Action.ESCALATE_TO_ON_CALL);
+		assertThat(proposal.escalationText()).contains(PAYMENT_ID).contains("5 min").contains("Reconciliation has not started");
 	}
 
 	// Two failed diagnoses then a proposal take five steps; with four allowed, the run stops instead.
 	@Test
 	void theStepLimitStopsTheRun() {
-		model.answering("not json", "still not json", """
-				{"action": "NO_ACTION", "escalationText": null}""");
+		model.answering("not json", "still not json");
 
 		assertThatThrownBy(() -> graph(4, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING)
 				.propose(investigationId, PAYMENT_ID, "OPS-0001"))
@@ -201,8 +210,7 @@ class StuckPaymentGraphTest {
 
 	@Test
 	void factsReachTheModelInsideTheDataBlockOnly() {
-		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
-				{"action": "NO_ACTION", "escalationText": null}""");
+		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING);
 
 		investigate("PROCESSING", Duration.ofMinutes(5), RUNNING);
 
@@ -215,8 +223,7 @@ class StuckPaymentGraphTest {
 	// The run stops before execute; nothing has been reconciled until a second operator resumes it.
 	@Test
 	void theRunPausesBeforeExecuteAndTheApproverRunsTheProposal() {
-		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
-				{"action": "RECONCILE_NOW", "escalationText": null}""");
+		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING);
 		StuckPaymentGraph graph = graph(10, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING);
 
 		InvestigationState paused = graph.propose(investigationId, PAYMENT_ID, "OPS-0001");
@@ -227,14 +234,14 @@ class StuckPaymentGraphTest {
 		assertThat(done.outcome()).contains(Execute.EXECUTED);
 		assertThat(done.result().orElseThrow()).contains("EXECUTED").contains("COMPLETED");
 		assertThat(reconciled).containsExactly(new ReconcilePaymentCommand(PAYMENT_ID, "OPS-0002"));
-		assertThat(model.prompts()).hasSize(2);
+		// The model was asked for the diagnosis only: code chose the action.
+		assertThat(model.prompts()).hasSize(1);
 	}
 
 	// Settled by the scheduled run while the proposal waited: nothing runs.
 	@Test
 	void aPaymentSettledSinceIsNoLongerNeeded() {
-		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
-				{"action": "RECONCILE_NOW", "escalationText": null}""");
+		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING);
 		StuckPaymentGraph graph = graph(10, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING);
 		graph.propose(investigationId, PAYMENT_ID, "OPS-0001");
 		statusAtApproval.set("COMPLETED");
@@ -250,7 +257,7 @@ class StuckPaymentGraphTest {
 		model.answering("""
 				{"cause": "RECONCILIATION_NOT_RUNNING", "evidenceIds": ["E7", "E9"], "confidence": "HIGH",
 				 "summary": "No reconciliation run for 10 minutes."}""", """
-				{"action": "ESCALATE_TO_ON_CALL", "escalationText": "Reconciliation hasn't run for 10 minutes."}""");
+				{"escalationText": "Reconciliation hasn't run for 10 minutes."}""");
 		StuckPaymentGraph graph = graph(10, payments("PROCESSING", Duration.ofMinutes(5)), STALLED);
 		graph.propose(investigationId, PAYMENT_ID, "OPS-0001");
 
@@ -264,8 +271,7 @@ class StuckPaymentGraphTest {
 	// A fresh graph over the same checkpoints stands in for another instance, or this one after a restart.
 	@Test
 	void anotherGraphResumesFromTheCheckpoint() {
-		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING, """
-				{"action": "RECONCILE_NOW", "escalationText": null}""");
+		model.answering(PAYMENT_SYSTEM_NOT_ANSWERING);
 		graph(10, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING).propose(investigationId, PAYMENT_ID, "OPS-0001");
 
 		StuckPaymentGraph another = graph(10, payments("PROCESSING", Duration.ofMinutes(5)), RUNNING);

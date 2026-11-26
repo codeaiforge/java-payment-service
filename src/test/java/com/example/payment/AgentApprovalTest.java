@@ -55,8 +55,6 @@ class AgentApprovalTest {
 	private static final String DIAGNOSIS = """
 			{"cause": "PAYMENT_SYSTEM_NOT_ANSWERING", "evidenceIds": ["E1", "E3", "E7"], "confidence": "MEDIUM",
 			 "summary": "Reconciliation ran, and the payment has been PROCESSING for 5 minutes."}""";
-	private static final String RECONCILE_NOW = """
-			{"action": "RECONCILE_NOW", "escalationText": null}""";
 
 	@RegisterExtension
 	static WireMockExtension externalSystems = WireMockExtension.newInstance()
@@ -203,7 +201,8 @@ class AgentApprovalTest {
 	}
 
 	private static String start(ConfigurableApplicationContext instance, String paymentId) throws Exception {
-		instance.getBean(ScriptedChatModel.class).answering(DIAGNOSIS, RECONCILE_NOW);
+		// The diagnosis only: code chooses the action (bonus 16), and an unread answer would be the next test's diagnosis.
+		instance.getBean(ScriptedChatModel.class).answering(DIAGNOSIS);
 		HttpResponse<String> started = post(instance, "/operations/investigations", operator("OPS-0001"),
 				"{\"paymentId\": \"" + paymentId + "\"}");
 		assertThat(started.statusCode()).isEqualTo(201);

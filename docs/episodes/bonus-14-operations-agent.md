@@ -152,6 +152,12 @@ When `NO_ACTION` is the only choice, the model isn't asked. The prompt passes
 the diagnosis's cause, an enum, and not its summary, which is the model's own
 text and could carry what it read.
 
+> **Later addition (bonus 16).** The evals showed the model picking the
+> action right less than half the time, with every cause right. Code now
+> picks the action from the cause and the payment's age, by the runbook's
+> rule; the model writes only the escalation text. See
+> [Bonus 16](bonus-16-agent-safety.md#the-action-moved-to-code).
+
 **Never, in any episode:** the agent completing, failing, cancelling or
 refunding a payment, or reaching a secondary port, a repository or an
 external system. Its nodes are given primary ports and a `ChatClient`,

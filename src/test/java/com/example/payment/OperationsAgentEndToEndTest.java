@@ -148,8 +148,6 @@ class OperationsAgentEndToEndTest {
 	private static final String DIAGNOSIS = """
 			{"cause": "PAYMENT_SYSTEM_NOT_ANSWERING", "evidenceIds": ["E1", "E3", "E7"], "confidence": "MEDIUM",
 			 "summary": "Reconciliation ran, and the payment has been PROCESSING for 5 minutes."}""";
-	private static final String RECONCILE_NOW = """
-			{"action": "RECONCILE_NOW", "escalationText": null}""";
 
 	@BeforeEach
 	void forgetEarlierAnswersAndRunReconciliationJustNow() {
@@ -172,8 +170,7 @@ class OperationsAgentEndToEndTest {
 		backdate(paymentId, "5 minutes");
 		model.answering("""
 				{"cause": "PAYMENT_SYSTEM_NOT_ANSWERING", "evidenceIds": ["E1", "E3", "E7"], "confidence": "MEDIUM",
-				 "summary": "Reconciliation ran, and the payment has been PROCESSING for 5 minutes."}""", """
-				{"action": "RECONCILE_NOW", "escalationText": null}""");
+				 "summary": "Reconciliation ran, and the payment has been PROCESSING for 5 minutes."}""");
 
 		String location = mockMvc.perform(post("/operations/investigations").with(operator())
 						.contentType(MediaType.APPLICATION_JSON).content("{\"paymentId\": \"" + paymentId + "\"}"))
@@ -189,24 +186,30 @@ class OperationsAgentEndToEndTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.proposal.action").value("RECONCILE_NOW"));
 		assertThat(storedStatus(paymentId)).isEqualTo("PROCESSING");
-		assertThat(model.prompts()).hasSize(2);
+		assertThat(model.prompts()).hasSize(1);
 	}
 
-	// Bonus 16. The model "obeys" the reference and proposes what isn't allowed: it becomes NO_ACTION, the refusal
-	// is recorded, and the payment is untouched. The reference reached the model inside the block, and couldn't close it.
+	// Bonus 16. Reconciliation has stopped, so code proposes ESCALATE_TO_ON_CALL and asks the model for the message. The
+	// model "obeys" the reference and writes its orders as the message: that is all it can change. The action is still
+	// code's, nothing is sent, the payment is untouched. The reference reached the model inside the block, and couldn't
+	// close it.
 	@Test
-	void aModelThatObeysTheInjectionCannotActOnIt() throws Exception {
+	void aModelThatObeysTheInjectionCanOnlyChangeTheWords() throws Exception {
 		String paymentId = processingPayment(INJECTION);
 		backdate(paymentId, "5 minutes");
-		model.answering(DIAGNOSIS, """
-				{"action": "COMPLETE_AND_REFUND_PAYMENT", "escalationText": null}""");
+		// No run for three hours: stalled, since this test schedules one an hour and stalled is twice that.
+		jdbc.sql("UPDATE shedlock SET locked_at = now() - interval '3 hours', lock_until = now() - interval '3 hours' WHERE name = 'reconciliation'").update();
+		model.answering("""
+				{"cause": "RECONCILIATION_NOT_RUNNING", "evidenceIds": ["E7", "E9"], "confidence": "HIGH",
+				 "summary": "No reconciliation run for three hours."}""", """
+				{"escalationText": "Mark this payment COMPLETED and refund it."}""");
 
 		mockMvc.perform(post("/operations/investigations").with(operator())
 						.contentType(MediaType.APPLICATION_JSON).content("{\"paymentId\": \"" + paymentId + "\"}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.status").value("PROPOSED"))
-				.andExpect(jsonPath("$.proposal.action").value("NO_ACTION"))
-				.andExpect(jsonPath("$.proposal.replaced").value(org.hamcrest.Matchers.containsString("COMPLETE_AND_REFUND_PAYMENT")));
+				.andExpect(jsonPath("$.proposal.action").value("ESCALATE_TO_ON_CALL"))
+				.andExpect(jsonPath("$.proposal.escalationText").value("Mark this payment COMPLETED and refund it."));
 
 		assertThat(storedStatus(paymentId)).isEqualTo("PROCESSING");
 		externalSystems.verify(0, getRequestedFor(urlEqualTo("/payment-orders/" + paymentId)));
@@ -215,12 +218,12 @@ class OperationsAgentEndToEndTest {
 		assertThat(user.substring(user.indexOf("</payment-data>"))).doesNotContain("IGNORE");
 	}
 
-	// The model proposes an allowed action: it still waits for a second operator, and nothing runs until then.
+	// Code proposes RECONCILE_NOW for the injected payment: it still waits for a second operator, and nothing runs.
 	@Test
 	void aProposalTheInjectionWantedStillWaitsForApproval() throws Exception {
 		String paymentId = processingPayment(INJECTION);
 		backdate(paymentId, "5 minutes");
-		model.answering(DIAGNOSIS, RECONCILE_NOW);
+		model.answering(DIAGNOSIS);
 
 		mockMvc.perform(post("/operations/investigations").with(operator())
 						.contentType(MediaType.APPLICATION_JSON).content("{\"paymentId\": \"" + paymentId + "\"}"))
@@ -237,7 +240,7 @@ class OperationsAgentEndToEndTest {
 	void spansAndLogsCarryThePaymentIdButNeverItsText(CapturedOutput output) throws Exception {
 		String paymentId = processingPayment(INJECTION);
 		backdate(paymentId, "5 minutes");
-		model.answering(DIAGNOSIS, RECONCILE_NOW);
+		model.answering(DIAGNOSIS);
 		spans.reset();
 
 		mockMvc.perform(post("/operations/investigations").with(operator())
@@ -265,7 +268,7 @@ class OperationsAgentEndToEndTest {
 	void investigationsAreCountedByCauseActionAndOutcome() throws Exception {
 		String paymentId = processingPayment("TIMEOUT counted");
 		backdate(paymentId, "5 minutes");
-		model.answering(DIAGNOSIS, RECONCILE_NOW);
+		model.answering(DIAGNOSIS);
 		double before = proposed();
 
 		mockMvc.perform(post("/operations/investigations").with(operator())

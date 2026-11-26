@@ -62,7 +62,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The agent against a real model (docs/episodes/bonus-16): each scenario in src/test/resources/agent-evals is one
  * payment, its history and the reconciliation status, with the cause and action a good on-call engineer would reach.
- * The graph runs as in production up to its pause; only the primary ports are faked from the scenario.
+ * The graph runs as in production up to its pause; only the primary ports are faked from the scenario. Since code
+ * picks the action from the cause, the action column measures the diagnosis end to end; what the model still writes
+ * is the escalation message, scored by whether it names the payment.
  *
  * Never part of verify (@Tag("eval")): ./mvnw -Peval verify, with the model running. It measures, it doesn't gate:
  * the test fails only if a scenario can't run, and prints the accuracy per expected cause, also to
@@ -77,7 +79,12 @@ class AgentEvalTest {
 
 	/** @param attempts diagnoses asked; 2 with UNCLEAR and no evidence means both answers failed validation */
 	record Outcome(String name, Scenario scenario, Cause cause, Action action, String replaced, int attempts,
-			boolean rejectedTwice, List<String> answers) {
+			boolean rejectedTwice, List<String> answers, String paymentId, String escalationText) {
+
+		/** An escalation the people receiving it can act on names the payment. */
+		boolean citesThePayment() {
+			return escalationText != null && escalationText.contains(paymentId);
+		}
 
 		boolean causeRight() {
 			return cause == scenario.expectedCause();
@@ -133,13 +140,15 @@ class AgentEvalTest {
 						return 0;
 					}
 				};
+				String paymentId = PaymentId.newId().toString();
 				InvestigationState state = graph(ChatClient.builder(model).defaultAdvisors(recording).build(), scenario)
-						.propose(UUID.randomUUID().toString(), PaymentId.newId().toString(), "OPS-EVAL");
+						.propose(UUID.randomUUID().toString(), paymentId, "OPS-EVAL");
 				ProposedAction proposal = state.proposal().orElseThrow();
 				Diagnosis diagnosis = state.diagnosis().orElseThrow();
 				outcomes.add(new Outcome(resource.getFilename().replace(".json", ""), scenario, diagnosis.cause(),
 						proposal.action(), proposal.replaced(), state.diagnoseAttempts(),
-						diagnosis.cause() == Cause.UNCLEAR && diagnosis.evidenceIds().isEmpty(), answers));
+						diagnosis.cause() == Cause.UNCLEAR && diagnosis.evidenceIds().isEmpty(), answers, paymentId,
+						proposal.escalationText()));
 			}
 			String report = report(modelName, String.join(",", profiles), outcomes);
 			System.out.println(report);
@@ -197,6 +206,11 @@ class AgentEvalTest {
 		out.append("%-30s %9d %8s %8s%n%n".formatted("all", outcomes.size(),
 				ratio(outcomes.stream().filter(Outcome::causeRight).count(), outcomes.size()),
 				ratio(outcomes.stream().filter(Outcome::actionRight).count(), outcomes.size())));
+		List<Outcome> escalations = outcomes.stream().filter(o -> o.escalationText() != null).toList();
+		out.append("escalation texts citing the payment id: %s%n%n".formatted(
+				ratio(escalations.stream().filter(Outcome::citesThePayment).count(), escalations.size())));
+		escalations.stream().filter(o -> !o.citesThePayment()).forEach(o -> out.append(
+				"no payment id %s: %s%n".formatted(o.name(), o.escalationText().replaceAll("\\s+", " "))));
 		outcomes.stream().filter(o -> !o.causeRight() || !o.actionRight()).forEach(o -> out.append(
 				"miss %s: %s / %s, expected %s / %s%s%n".formatted(o.name(), o.cause(), o.action(),
 						o.scenario().expectedCause(), o.scenario().expectedAction(),
